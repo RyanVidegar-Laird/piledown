@@ -1,0 +1,22 @@
+[package]
+name = "piledown"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.95"
+clap = { version = "4.5.26", features = ["derive"] }
+clap-verbosity-flag = "3.0.2"
+env_logger = "0.11.6"
+futures = "0.3.31"
+log = "0.4.25"
+noodles = { version = "0.87.0", features = ["core", "sam", "bam", "async"] }
+tokio = { version = "1.43.0", features = ["fs", "io-util", "macros", "rt-multi-thread"] }
+
+[profile.release]
+opt-level = 3
+strip = "symbols"
+codegen-units = 1
+lto = true
+panic = "abort"
+
