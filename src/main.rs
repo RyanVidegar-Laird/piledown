@@ -74,8 +74,14 @@ fn main() -> Result<()> {
         }
     }
 
-    let writer = std::io::stdout().lock();
-    serde_json::to_writer_pretty(writer, &serde_json::json!(piles))?;
+    let mut writer = csv::Writer::from_writer(std::io::stdout());
+
+    writer.write_record(&["seq", "pos", "strand", "up", "down"])?;
+    for (pos, cov) in piles.coverage.iter() {
+        writer.serialize((piles.seq.clone(), pos, piles.strand, cov.up, cov.down))?
+    }
+
+    writer.flush()?;
     Ok(())
 }
 

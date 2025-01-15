@@ -19,8 +19,8 @@ pub enum Strand {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Coverage {
-    up: usize,
-    down: usize,
+    pub up: usize,
+    pub down: usize,
 }
 
 type Pos = usize;
