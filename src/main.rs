@@ -2,7 +2,7 @@ mod cli;
 
 use crate::cli::*;
 use anyhow::Result;
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use core::panic;
 use log::{debug, error, info};
 use noodles::{bam, core::Region, sam::alignment::record::Flags};
