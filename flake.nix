@@ -58,6 +58,19 @@
           
           doCheck = false;
         });
+
+        python-packages = with pkgs.python3Packages; [
+          pyarrow
+        ];
+        pythonEnv = pkgs.python3.withPackages (ps: python-packages);
+
+        pyPackage = pkgs.python3.pkgs.buildPythonPackage {
+          inherit pname version;
+          src = ./piledown;
+          pyproject = false;
+          doCheck = false;
+        };
+
       in
       {
         formatter = pkgs.nixpkgs-fmt;
@@ -91,6 +104,7 @@
 
         packages = {
           default = my-crate;
+          pypiledown = pyPackage;
         };
 
         apps.default = flake-utils.lib.mkApp {
@@ -105,6 +119,14 @@
             cargo-edit
             cargo-generate
             samtools
+            pythonEnv
+            maturin
+          ];
+        };
+
+        devShells.python = pkgs.mkShell {
+          buildInputs = [
+            (pkgs.python3.withPackages (ps: [ pyPackage ]))
           ];
         };
       });
