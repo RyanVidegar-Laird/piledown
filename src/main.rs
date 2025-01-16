@@ -11,11 +11,8 @@ use piledown::structs::*;
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let mut logger = env_logger::Builder::from_default_env();
-    match cli.verbose.is_present() {
-        true => {
-            logger.filter_level(cli.verbose.log_level_filter());
-        }
-        false => {}
+    if cli.verbose.is_present() {
+        logger.filter_level(cli.verbose.log_level_filter());
     }
     logger.init();
 
@@ -54,7 +51,7 @@ fn main() -> Result<()> {
     let mut writer = csv::Writer::from_writer(std::io::stdout());
 
     debug!("writing csv to stdout");
-    writer.write_record(&["seq", "pos", "strand", "up", "down"])?;
+    writer.write_record(["seq", "pos", "strand", "up", "down"])?;
     for (pos, cov) in pile.coverage.iter() {
         writer.serialize((
             pile.seq.clone(),

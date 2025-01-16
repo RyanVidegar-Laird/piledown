@@ -67,9 +67,8 @@ impl Pile {
         let flags = record.flags();
 
         if let Some(eflags) = self.exclude_flags {
-            match flags.intersects(eflags) {
-                true => return,
-                false => {}
+            if flags.intersects(eflags) {
+                return;
             }
         }
         let strand = get_strand(LibFragmentType::Isr, flags);
@@ -99,8 +98,6 @@ impl Pile {
                             _ => current_pos += op.len(),
                         }
                     }
-                } else {
-                    return;
                 }
             }
             Err(err) => {
