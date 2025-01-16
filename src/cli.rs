@@ -1,5 +1,5 @@
-use crate::structs::LibFragmentType;
 use clap::Parser;
+use piledown::structs::{LibFragmentType, Strand};
 
 /// Simple CLI to split bam files by strand.
 #[derive(Parser, Debug)]
@@ -17,7 +17,7 @@ pub struct Cli {
 
     /// Strand
     #[arg(short, long)]
-    pub strand: crate::structs::Strand,
+    pub strand: Strand,
 
     /// Fragment library type (see samlon docs)
     #[arg(short, long, value_enum)]

@@ -1,13 +1,12 @@
 mod cli;
-mod structs;
 
-use crate::cli::Cli;
-use crate::structs::*;
+use crate::cli::*;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use core::panic;
 use log::{debug, error, info};
 use noodles::{bam, core::Region, sam::alignment::record::Flags};
+use piledown::structs::*;
 
 #[macro_use]
 extern crate lazy_static;
