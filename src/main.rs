@@ -2,7 +2,7 @@ mod cli;
 
 use crate::cli::*;
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use core::panic;
 use log::{debug, error, info};
 use noodles::{bam, core::Region, sam::alignment::record::Flags};
@@ -56,7 +56,13 @@ fn main() -> Result<()> {
     debug!("writing csv to stdout");
     writer.write_record(&["seq", "pos", "strand", "up", "down"])?;
     for (pos, cov) in pile.coverage.iter() {
-        writer.serialize((pile.seq.clone(), pos, pile.strand, cov.up, cov.down))?
+        writer.serialize((
+            pile.seq.clone(),
+            pos,
+            pile.strand.to_string(),
+            cov.up,
+            cov.down,
+        ))?
     }
 
     writer.flush()?;

@@ -1,3 +1,4 @@
+use core::fmt;
 use std::collections::HashMap;
 
 use clap::ValueEnum;
@@ -13,11 +14,20 @@ pub enum LibFragmentType {
     Isr,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Strand {
     Forward,
     Reverse,
     Either,
+}
+impl fmt::Display for Strand {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Strand::Forward => write!(f, "+"),
+            Strand::Reverse => write!(f, "-"),
+            Strand::Either => write!(f, "."),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
