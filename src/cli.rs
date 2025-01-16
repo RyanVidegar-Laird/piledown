@@ -8,9 +8,6 @@ pub struct Cli {
     /// Input alignment file
     pub input: std::path::PathBuf,
 
-    /// Output dir for stranded alignment files
-    pub outdir: std::path::PathBuf,
-
     /// 1 genomic region formatted as '<seq>:<start>-<stop>'
     #[arg(short, long)]
     pub region: String,
