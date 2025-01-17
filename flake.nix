@@ -59,18 +59,20 @@
           doCheck = false;
         });
 
-        python-packages = with pkgs.python3Packages; [
-          pyarrow
-        ];
-        pythonEnv = pkgs.python3.withPackages (ps: python-packages);
 
-        pyPackage = pkgs.python3.pkgs.buildPythonPackage {
+        piledown-py = pkgs.python3.pkgs.buildPythonPackage {
           inherit pname version;
           src = ./piledown;
+          propagatedBuildInputs = with pkgs.python3Packages; [ pyarrow ];
           pyproject = false;
           doCheck = false;
         };
 
+        python-packages = with pkgs.python3Packages; [
+          pandas
+          pyarrow
+        ];
+        pythonEnv = pkgs.python3.withPackages (ps: python-packages);
       in
       {
         formatter = pkgs.nixpkgs-fmt;
@@ -104,7 +106,7 @@
 
         packages = {
           default = my-crate;
-          pypiledown = pyPackage;
+          pypiledown = piledown-py;
         };
 
         apps.default = flake-utils.lib.mkApp {
@@ -121,12 +123,9 @@
             samtools
             pythonEnv
             maturin
-          ];
-        };
-
-        devShells.python = pkgs.mkShell {
-          buildInputs = [
-            (pkgs.python3.withPackages (ps: [ pyPackage ]))
+            pythonEnv
+            # ruff-lsp
+            # pyright
           ];
         };
       });
