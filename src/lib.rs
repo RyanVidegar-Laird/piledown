@@ -43,27 +43,37 @@ pub fn get_strand(lib: LibFragmentType, flags: Flags) -> Result<Strand> {
 mod piledown {
     use std::fmt::Display;
     use std::fmt::Formatter;
+    use std::sync::Arc;
 
     #[pymodule_export]
     use crate::structs::LibFragmentType;
+    use crate::structs::Pile;
     #[pymodule_export]
     use crate::structs::Strand;
+    use arrow::array::GenericStringBuilder;
+    use arrow::array::RecordBatch;
+    use arrow::array::UInt64Builder;
+    use arrow::datatypes::DataType;
+    use arrow::datatypes::Field;
+    use arrow::datatypes::Schema;
+    use arrow::pyarrow::PyArrowType;
+    use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
     use pyo3::types::PyString;
 
     #[derive(Debug, Clone)]
     #[pyclass(str)]
-    struct PileParams {
+    pub struct PileParams {
         #[pyo3(get)]
-        input_bam: std::path::PathBuf,
+        pub input_bam: std::path::PathBuf,
         #[pyo3(get)]
-        region: String,
+        pub region: String,
         #[pyo3(get)]
-        strand: Strand,
+        pub strand: Strand,
         #[pyo3(get)]
-        lib_fragment_type: LibFragmentType,
+        pub lib_fragment_type: LibFragmentType,
         #[pyo3(get)]
-        exclude_flags: Option<u16>,
+        pub exclude_flags: Option<u16>,
     }
 
     #[pymethods]
@@ -98,6 +108,49 @@ mod piledown {
                 slf.borrow().lib_fragment_type,
                 slf.borrow().exclude_flags
             ))
+        }
+
+        fn generate(&self) -> PyResult<PyArrowType<RecordBatch>> {
+            let schema = Schema::new(vec![
+                Field::new("seq", DataType::Utf8, false),
+                Field::new("strand", DataType::Utf8, false),
+                Field::new("pos", DataType::UInt64, false),
+                Field::new("up", DataType::UInt64, false),
+                Field::new("down", DataType::UInt64, false),
+            ]);
+
+            let mut pile =
+                Pile::try_from(self).map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+            pile.generate()?;
+
+            let n_bases = pile.coverage.len();
+            let mut seq = GenericStringBuilder::<i32>::new();
+            let mut strand = GenericStringBuilder::<i32>::new();
+            let mut pos = UInt64Builder::with_capacity(n_bases);
+            let mut up = UInt64Builder::with_capacity(n_bases);
+            let mut down = UInt64Builder::with_capacity(n_bases);
+
+            for (p, cov) in pile.coverage.iter() {
+                seq.append_value(pile.seq.clone());
+                strand.append_value(pile.strand.to_string());
+                pos.append_value(*p);
+                up.append_value(cov.up);
+                down.append_value(cov.down);
+            }
+            let batch = RecordBatch::try_new(
+                Arc::new(schema),
+                vec![
+                    Arc::new(seq.finish()),
+                    Arc::new(strand.finish()),
+                    Arc::new(pos.finish()),
+                    Arc::new(up.finish()),
+                    Arc::new(down.finish()),
+                ],
+            )
+            .unwrap();
+
+            Ok(PyArrowType(batch))
         }
     }
     impl Display for PileParams {

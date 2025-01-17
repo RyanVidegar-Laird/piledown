@@ -36,11 +36,11 @@ impl fmt::Display for Strand {
 
 #[derive(Clone, Debug)]
 pub struct Coverage {
-    pub up: usize,
-    pub down: usize,
+    pub up: u64,
+    pub down: u64,
 }
 
-type Pos = usize;
+type Pos = u64;
 #[derive(Clone, Debug)]
 pub struct Pile {
     pub input_bam: std::path::PathBuf,
@@ -59,9 +59,9 @@ impl Pile {
         exclude_flags: Option<Flags>,
     ) -> Self {
         let seq = region.name().to_string();
-        let start = region.interval().start().unwrap().get();
-        let end = region.interval().end().unwrap().get();
-        let coverage: HashMap<usize, Coverage> = (start..=end)
+        let start = region.interval().start().unwrap().get() as u64;
+        let end = region.interval().end().unwrap().get() as u64;
+        let coverage: HashMap<u64, Coverage> = (start..=end)
             .map(|i| (i, Coverage { up: 0, down: 0 }))
             .collect();
 
@@ -103,7 +103,7 @@ impl Pile {
         }
         let strand = get_strand(LibFragmentType::Isr, flags)?;
         if (self.strand == Strand::Either) | (strand == self.strand) {
-            let mut current_pos = record.alignment_start().unwrap().unwrap().get();
+            let mut current_pos = record.alignment_start().unwrap().unwrap().get() as u64;
             for op in record.cigar().iter() {
                 let op = op.unwrap();
                 match op.kind() {
@@ -123,10 +123,32 @@ impl Pile {
                             current_pos += 1;
                         }
                     }
-                    _ => current_pos += op.len(),
+                    _ => current_pos += op.len() as u64,
                 }
             }
         }
         Ok(())
+    }
+}
+
+impl TryFrom<&crate::piledown::PileParams> for Pile {
+    type Error = &'static str;
+    fn try_from(item: &crate::piledown::PileParams) -> std::result::Result<Self, Self::Error> {
+        let region = item.region.parse();
+        let exclude_flags: Option<Flags> = if let Some(exclude) = item.exclude_flags {
+            let exclude_flags = Flags::from(exclude);
+            Some(exclude_flags)
+        } else {
+            None
+        };
+        match region {
+            Ok(reg) => Ok(Pile::new(
+                item.input_bam.clone(),
+                reg,
+                item.strand,
+                exclude_flags,
+            )),
+            Err(_e) => Err("Could not cast PileParms to Pile"),
+        }
     }
 }
