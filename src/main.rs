@@ -3,9 +3,8 @@ mod cli;
 use crate::cli::*;
 use anyhow::Result;
 use clap::Parser;
-use core::panic;
-use log::{debug, error, info};
-use noodles::{bam, core::Region, sam::alignment::record::Flags};
+use log::{debug, info};
+use noodles::{core::Region, sam::alignment::record::Flags};
 use piledown::structs::*;
 
 fn main() -> Result<()> {
@@ -15,11 +14,7 @@ fn main() -> Result<()> {
         logger.filter_level(cli.verbose.log_level_filter());
     }
     logger.init();
-
     info!("input: {:?}", cli.input.clone());
-    let mut reader =
-        bam::io::indexed_reader::Builder::default().build_from_path(cli.input.clone())?;
-    let header = reader.read_header()?.clone();
 
     let exclude_flags: Option<Flags> = if let Some(exclude) = cli.exclude {
         let exclude_flags = Flags::from(exclude);
@@ -30,23 +25,9 @@ fn main() -> Result<()> {
     };
 
     let region: Region = cli.region.parse()?;
-
     debug!("instantiating Pile");
-    let mut pile = Pile::init(region.clone(), cli.strand, exclude_flags);
-
-    let query = match reader.query(&header, &region) {
-        Ok(q) => {
-            info!("querying reads in: {}", region);
-            q
-        }
-        Err(e) => {
-            error!("{e}");
-            panic!()
-        }
-    };
-
-    debug!("iterating over queried alignment records");
-    query.into_iter().for_each(|rec| pile.update(&rec.unwrap()));
+    let mut pile = Pile::new(cli.input.clone(), region.clone(), cli.strand, exclude_flags);
+    pile.generate()?;
 
     let mut writer = csv::Writer::from_writer(std::io::stdout());
 
