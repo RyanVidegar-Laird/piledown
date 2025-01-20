@@ -1,5 +1,5 @@
 use clap::Parser;
-use piledown::structs::{LibFragmentType, Strand};
+use piledown::structs::{LibFragmentType, OutputFormat, Strand};
 
 /// Simple CLI to split bam files by strand.
 #[derive(Parser, Debug)]
@@ -23,6 +23,10 @@ pub struct Cli {
     /// u16 sam/bam flags to exclude
     #[arg(short, long)]
     pub exclude: Option<u16>,
+
+    /// Output format
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Tsv)]
+    pub output_format: OutputFormat,
 
     #[command(flatten)]
     pub verbose: clap_verbosity_flag::Verbosity,

@@ -29,21 +29,9 @@ fn main() -> Result<()> {
     let mut pile = Pile::new(cli.input.clone(), region.clone(), cli.strand, exclude_flags);
     pile.generate()?;
 
-    let mut writer = csv::Writer::from_writer(std::io::stdout());
+    let format = cli.output_format;
+    pile.write(format)?;
 
-    debug!("writing csv to stdout");
-    writer.write_record(["seq", "pos", "strand", "up", "down"])?;
-    for (pos, cov) in pile.coverage.iter() {
-        writer.serialize((
-            pile.seq.clone(),
-            pos,
-            pile.strand.to_string(),
-            cov.up,
-            cov.down,
-        ))?
-    }
-
-    writer.flush()?;
     info!("Done!");
     Ok(())
 }

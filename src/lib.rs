@@ -43,19 +43,13 @@ pub fn get_strand(lib: LibFragmentType, flags: Flags) -> Result<Strand> {
 mod piledown {
     use std::fmt::Display;
     use std::fmt::Formatter;
-    use std::sync::Arc;
 
     #[pymodule_export]
     use crate::structs::LibFragmentType;
     use crate::structs::Pile;
     #[pymodule_export]
     use crate::structs::Strand;
-    use arrow::array::GenericStringBuilder;
     use arrow::array::RecordBatch;
-    use arrow::array::UInt64Builder;
-    use arrow::datatypes::DataType;
-    use arrow::datatypes::Field;
-    use arrow::datatypes::Schema;
     use arrow::pyarrow::PyArrowType;
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;

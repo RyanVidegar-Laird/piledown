@@ -1,6 +1,10 @@
 use core::fmt;
 use fnv::FnvBuildHasher;
 use indexmap::IndexMap;
+use parquet::arrow::ArrowWriter;
+use parquet::basic::Encoding;
+use parquet::file::properties::WriterProperties;
+use parquet::schema::types::ColumnPath;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -23,6 +27,7 @@ pub enum LibFragmentType {
     Isr,
 }
 
+/// Which strand to use; be careful to select correct [library fragment type](struct@LibFragmentType)
 #[pyclass(eq, eq_int)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Strand {
@@ -138,7 +143,7 @@ impl Pile {
             ],
         )
         .unwrap();
-        return Ok(batch);
+        Ok(batch)
     }
 
     pub fn update(&mut self, record: &Record) -> Result<()> {
@@ -173,6 +178,57 @@ impl Pile {
                     }
                     _ => current_pos += op.len() as u64,
                 }
+            }
+        }
+        Ok(())
+    }
+
+    // Write generated Pile to stdout in specified format
+    pub fn write(&self, format: OutputFormat) -> Result<()> {
+        let stdout = std::io::stdout();
+        match format {
+            OutputFormat::Tsv => {
+                let mut writer = csv::WriterBuilder::new()
+                    .delimiter(b'\t')
+                    .from_writer(stdout);
+                writer.write_record(["seq", "pos", "strand", "up", "down"])?;
+                for (pos, cov) in self.coverage.iter() {
+                    writer.serialize((
+                        self.seq.clone(),
+                        pos,
+                        self.strand.to_string(),
+                        cov.up,
+                        cov.down,
+                    ))?
+                }
+                writer.flush()?;
+            }
+            OutputFormat::Arrow => {
+                let record_batch = self.to_record_batch()?;
+                let mut writer = arrow::ipc::writer::FileWriter::try_new_buffered(
+                    stdout,
+                    &record_batch.schema(),
+                )?;
+
+                writer.write(&record_batch)?;
+                writer.flush()?;
+                writer.finish()?;
+            }
+            OutputFormat::Parquet => {
+                let record_batch = self.to_record_batch()?;
+                let writer_props = WriterProperties::builder()
+                    .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
+                    .set_column_encoding(ColumnPath::from("pos"), Encoding::DELTA_BINARY_PACKED)
+                    .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
+                    .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
+                    .set_compression(parquet::basic::Compression::SNAPPY)
+                    .build();
+
+                let mut writer =
+                    ArrowWriter::try_new(stdout, record_batch.schema(), Some(writer_props))?;
+
+                writer.write(&record_batch)?;
+                writer.close()?;
             }
         }
         Ok(())
