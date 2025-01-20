@@ -1,5 +1,6 @@
 use core::fmt;
-use std::collections::HashMap;
+use fnv::FnvBuildHasher;
+use indexmap::IndexMap;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -11,6 +12,8 @@ use noodles::{bam::Record, core::Region, sam::alignment::record::cigar::op::Kind
 
 use crate::get_strand;
 use pyo3::prelude::*;
+
+type FnvIndexMap<K, V> = IndexMap<K, V, FnvBuildHasher>;
 
 /// Type of library preperation protocol. See [Salmon Docs](https://salmon.readthedocs.io/en/latest/library_type.html)
 #[pyclass(eq, eq_int)]
@@ -58,7 +61,7 @@ pub struct Pile {
     pub seq: String,
     pub strand: Strand,
     pub exclude_flags: Option<Flags>,
-    pub coverage: HashMap<Pos, Coverage>,
+    pub coverage: FnvIndexMap<Pos, Coverage>,
 }
 
 impl Pile {
@@ -71,7 +74,7 @@ impl Pile {
         let seq = region.name().to_string();
         let start = region.interval().start().unwrap().get() as u64;
         let end = region.interval().end().unwrap().get() as u64;
-        let coverage: HashMap<u64, Coverage> = (start..=end)
+        let coverage: FnvIndexMap<u64, Coverage> = (start..=end)
             .map(|i| (i, Coverage { up: 0, down: 0 }))
             .collect();
 
