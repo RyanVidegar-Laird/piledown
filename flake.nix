@@ -69,8 +69,8 @@
         };
 
         python-packages = with pkgs.python3Packages; [
-          pandas
           pyarrow
+          seaborn
         ];
         pythonEnv = pkgs.python3.withPackages (ps: python-packages);
       in
@@ -120,12 +120,11 @@
           packages = with pkgs; [
             cargo-edit
             cargo-generate
-            samtools
-            pythonEnv
             maturin
+            samtools
+            pyright
+            ruff-lsp
             pythonEnv
-            # ruff-lsp
-            # pyright
           ];
         };
       });
