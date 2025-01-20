@@ -1,7 +1,10 @@
 use core::fmt;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use anyhow::Result;
+use arrow::array::{GenericStringBuilder, RecordBatch, UInt64Builder};
+use arrow::datatypes::{DataType, Field, Schema};
 use clap::ValueEnum;
 use noodles::sam::alignment::record::Flags;
 use noodles::{bam::Record, core::Region, sam::alignment::record::cigar::op::Kind};
@@ -32,6 +35,13 @@ impl fmt::Display for Strand {
             Strand::Either => write!(f, "."),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum OutputFormat {
+    Tsv,
+    Arrow,
+    Parquet,
 }
 
 #[derive(Clone, Debug)]
@@ -91,6 +101,41 @@ impl Pile {
             self.update(&rec.unwrap())?
         }
         Ok(())
+    }
+    pub fn to_record_batch(&self) -> Result<RecordBatch> {
+        let schema = Schema::new(vec![
+            Field::new("seq", DataType::Utf8, false),
+            Field::new("strand", DataType::Utf8, false),
+            Field::new("pos", DataType::UInt64, false),
+            Field::new("up", DataType::UInt64, false),
+            Field::new("down", DataType::UInt64, false),
+        ]);
+        let n_bases = self.coverage.len();
+        let mut seq = GenericStringBuilder::<i32>::new();
+        let mut strand = GenericStringBuilder::<i32>::new();
+        let mut pos = UInt64Builder::with_capacity(n_bases);
+        let mut up = UInt64Builder::with_capacity(n_bases);
+        let mut down = UInt64Builder::with_capacity(n_bases);
+
+        for (p, cov) in self.coverage.iter() {
+            seq.append_value(self.seq.clone());
+            strand.append_value(self.strand.to_string());
+            pos.append_value(*p);
+            up.append_value(cov.up);
+            down.append_value(cov.down);
+        }
+        let batch = RecordBatch::try_new(
+            Arc::new(schema),
+            vec![
+                Arc::new(seq.finish()),
+                Arc::new(strand.finish()),
+                Arc::new(pos.finish()),
+                Arc::new(up.finish()),
+                Arc::new(down.finish()),
+            ],
+        )
+        .unwrap();
+        return Ok(batch);
     }
 
     pub fn update(&mut self, record: &Record) -> Result<()> {

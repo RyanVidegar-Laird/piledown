@@ -111,44 +111,11 @@ mod piledown {
         }
 
         fn generate(&self) -> PyResult<PyArrowType<RecordBatch>> {
-            let schema = Schema::new(vec![
-                Field::new("seq", DataType::Utf8, false),
-                Field::new("strand", DataType::Utf8, false),
-                Field::new("pos", DataType::UInt64, false),
-                Field::new("up", DataType::UInt64, false),
-                Field::new("down", DataType::UInt64, false),
-            ]);
-
             let mut pile =
                 Pile::try_from(self).map_err(|e| PyValueError::new_err(e.to_string()))?;
 
             pile.generate()?;
-
-            let n_bases = pile.coverage.len();
-            let mut seq = GenericStringBuilder::<i32>::new();
-            let mut strand = GenericStringBuilder::<i32>::new();
-            let mut pos = UInt64Builder::with_capacity(n_bases);
-            let mut up = UInt64Builder::with_capacity(n_bases);
-            let mut down = UInt64Builder::with_capacity(n_bases);
-
-            for (p, cov) in pile.coverage.iter() {
-                seq.append_value(pile.seq.clone());
-                strand.append_value(pile.strand.to_string());
-                pos.append_value(*p);
-                up.append_value(cov.up);
-                down.append_value(cov.down);
-            }
-            let batch = RecordBatch::try_new(
-                Arc::new(schema),
-                vec![
-                    Arc::new(seq.finish()),
-                    Arc::new(strand.finish()),
-                    Arc::new(pos.finish()),
-                    Arc::new(up.finish()),
-                    Arc::new(down.finish()),
-                ],
-            )
-            .unwrap();
+            let batch = pile.to_record_batch()?;
 
             Ok(PyArrowType(batch))
         }
