@@ -1,15 +1,16 @@
-use core::fmt;
 use fnv::FnvBuildHasher;
 use indexmap::IndexMap;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Encoding;
 use parquet::file::properties::WriterProperties;
 use parquet::schema::types::ColumnPath;
+use std::convert::AsRef;
 use std::sync::Arc;
+use strum_macros::AsRefStr;
 
 use anyhow::Result;
-use arrow::array::{GenericStringBuilder, RecordBatch, UInt64Builder};
-use arrow::datatypes::{DataType, Field, Schema};
+use arrow::array::{GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Builder};
+use arrow::datatypes::{DataType, Field, Int8Type, Schema};
 use clap::ValueEnum;
 use noodles::sam::alignment::record::Flags;
 use noodles::{bam::Record, core::Region, sam::alignment::record::cigar::op::Kind};
@@ -29,20 +30,14 @@ pub enum LibFragmentType {
 
 /// Which strand to use; be careful to select correct [library fragment type](struct@LibFragmentType)
 #[pyclass(eq, eq_int)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum, AsRefStr)]
 pub enum Strand {
+    #[strum(serialize = "+")]
     Forward,
+    #[strum(serialize = "-")]
     Reverse,
+    #[strum(serialize = ".")]
     Either,
-}
-impl fmt::Display for Strand {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Strand::Forward => write!(f, "+"),
-            Strand::Reverse => write!(f, "-"),
-            Strand::Either => write!(f, "."),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -113,21 +108,23 @@ impl Pile {
     pub fn to_record_batch(&self) -> Result<RecordBatch> {
         let schema = Schema::new(vec![
             Field::new("seq", DataType::Utf8, false),
-            Field::new("strand", DataType::Utf8, false),
+            Field::new_dictionary("strand", DataType::Int8, DataType::Utf8, false),
             Field::new("pos", DataType::UInt64, false),
             Field::new("up", DataType::UInt64, false),
             Field::new("down", DataType::UInt64, false),
         ]);
+
         let n_bases = self.coverage.len();
         let mut seq = GenericStringBuilder::<i32>::new();
-        let mut strand = GenericStringBuilder::<i32>::new();
+        let mut strand =
+            StringDictionaryBuilder::<Int8Type>::with_capacity(3, n_bases, n_bases * 8);
         let mut pos = UInt64Builder::with_capacity(n_bases);
         let mut up = UInt64Builder::with_capacity(n_bases);
         let mut down = UInt64Builder::with_capacity(n_bases);
 
         for (p, cov) in self.coverage.iter() {
             seq.append_value(self.seq.clone());
-            strand.append_value(self.strand.to_string());
+            strand.append_value(self.strand.as_ref());
             pos.append_value(*p);
             up.append_value(cov.up);
             down.append_value(cov.down);
@@ -196,7 +193,7 @@ impl Pile {
                     writer.serialize((
                         self.seq.clone(),
                         pos,
-                        self.strand.to_string(),
+                        self.strand.as_ref(),
                         cov.up,
                         cov.down,
                     ))?
