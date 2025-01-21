@@ -157,6 +157,7 @@ impl Pile {
             for op in record.cigar().iter() {
                 let op = op.unwrap();
                 match op.kind() {
+                    // "M"
                     Kind::Match => {
                         for _ in 1..=op.len() {
                             if let Some(bp) = self.coverage.get_mut(&current_pos) {
@@ -165,6 +166,34 @@ impl Pile {
                             current_pos += 1;
                         }
                     }
+                    // "="
+                    Kind::SequenceMatch => {
+                        for _ in 1..=op.len() {
+                            if let Some(bp) = self.coverage.get_mut(&current_pos) {
+                                bp.up += 1;
+                            }
+                            current_pos += 1;
+                        }
+                    }
+                    // "X" -- Includes ref mismatches in coverage to mirror same logic as generic "M"s / Matches
+                    Kind::SequenceMismatch => {
+                        for _ in 1..=op.len() {
+                            if let Some(bp) = self.coverage.get_mut(&current_pos) {
+                                bp.up += 1;
+                            }
+                            current_pos += 1;
+                        }
+                    }
+                    // "D" -- Deletions still consume the reference. TODO! add option to not count them
+                    Kind::Deletion => {
+                        for _ in 1..=op.len() {
+                            if let Some(bp) = self.coverage.get_mut(&current_pos) {
+                                bp.up += 1;
+                            }
+                            current_pos += 1;
+                        }
+                    }
+                    // "N"
                     Kind::Skip => {
                         for _ in 1..=op.len() {
                             if let Some(bp) = self.coverage.get_mut(&current_pos) {
@@ -173,7 +202,11 @@ impl Pile {
                             current_pos += 1;
                         }
                     }
-                    _ => current_pos += op.len() as u64,
+                    // "I","S","H","P" -- The goal is to calculate coverage w.r.t the reference, which the following do not consume
+                    Kind::Insertion => continue,
+                    Kind::SoftClip => continue,
+                    Kind::HardClip => continue,
+                    Kind::Pad => continue,
                 }
             }
         }
