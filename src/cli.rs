@@ -1,9 +1,8 @@
 use clap::Parser;
 use piledown::structs::{LibFragmentType, OutputFormat, Strand};
 
-/// Simple CLI to split bam files by strand.
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about, long_about = include_str!("../assets/logo.txt"))]
 pub struct Cli {
     /// Input alignment file
     pub input: std::path::PathBuf,
