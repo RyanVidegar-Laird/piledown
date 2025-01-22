@@ -1,0 +1,17 @@
+[project]
+name = "piledown"
+version = "0.1.0"
+requires-python = ">=3.8"
+dependencies = [
+"pyarrow>=18.0.0",
+]
+
+[project.optional-dependencies]
+plot = ["seaborn"]
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]

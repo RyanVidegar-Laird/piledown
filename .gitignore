@@ -2,6 +2,7 @@
 /tests/rawData/
 
 /.direnv/
+/.venv/
 
 # Python
 # Byte-compiled / optimized / DLL files

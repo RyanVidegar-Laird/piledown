@@ -71,6 +71,22 @@
           seaborn
         ];
         pythonEnv = pkgs.python3.withPackages (ps: python-packages);
+        devPkgs = with pkgs; [
+          cargo-edit
+          cargo-generate
+          duckdb
+          maturin
+          samtools
+          pyright
+          ruff-lsp
+          pythonEnv
+        ];
+        pythonTestFHSEnv = pkgs.buildFHSEnv {
+          name = "piledown";
+          targetPkgs = pkgs: with pkgs; [
+            python3
+          ] ++ devPkgs;
+        };
       in
       {
         formatter = pkgs.nixpkgs-fmt;
@@ -114,17 +130,8 @@
         devShells.default = craneLib.devShell {
           # Inherit inputs from checks.
           checks = self.checks.${system};
-
-          packages = with pkgs; [
-            cargo-edit
-            cargo-generate
-            duckdb
-            maturin
-            samtools
-            pyright
-            ruff-lsp
-            pythonEnv
-          ];
+          packages = devPkgs;
         };
+        devShells.pyFHS = pythonTestFHSEnv.env;
       });
 }
