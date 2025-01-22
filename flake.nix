@@ -35,10 +35,9 @@
           overlays = [ (import rust-overlay) ];
         };
 
-        rustTarget = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
+        rustTarget = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "rust-analyzer" ];
-          targets = [ "wasm32-unknown-unknown" ];
-        });
+        };
 
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustTarget;
@@ -55,7 +54,6 @@
 
         my-crate = craneLib.buildPackage (commonArgs // {
           inherit pname version cargoArtifacts;
-          
           doCheck = false;
         });
 
@@ -120,6 +118,7 @@
           packages = with pkgs; [
             cargo-edit
             cargo-generate
+            duckdb
             maturin
             samtools
             pyright
