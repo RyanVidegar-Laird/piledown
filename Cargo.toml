@@ -16,7 +16,6 @@ env_logger = "0.11.6"
 fnv = "1.0.7"
 futures = "0.3.31"
 indexmap = { version = "2.7.1", features = ["serde"] }
-lazy_static = "1.5.0"
 log = "0.4.25"
 noodles = { version = "0.87.0", features = ["core", "sam", "bam", "async"] }
 parquet = "54.0.0"

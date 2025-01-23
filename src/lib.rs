@@ -2,33 +2,30 @@ pub mod structs;
 
 use anyhow::{anyhow, Result};
 use noodles::sam::alignment::record::Flags;
+use std::cell::LazyCell;
 use structs::{LibFragmentType, Strand};
-#[macro_use]
-extern crate lazy_static;
 
 pub fn get_strand(lib: LibFragmentType, flags: Flags) -> Result<Strand> {
     if !flags.is_segmented() | !flags.is_properly_segmented() {
         return Err(anyhow!("not enough info to determine strand"));
     }
 
-    // These bitflags are known at compile time, but hardcoding them is less
-    // reader friendly. Instead, use lazy_static to only eval them once during runtime
-    lazy_static! {
+    // The below bitflags are known at compile time, but hardcoding them is less
+    // reader friendly. Instead, use a LazyCell to only eval them once during runtime
 
-        //forward read flags for ISR
-        static ref ISR_F1_FLAGS: Flags = Flags::REVERSE_COMPLEMENTED | Flags::FIRST_SEGMENT;
-        static ref ISR_F2_FLAGS: Flags = Flags::MATE_REVERSE_COMPLEMENTED | Flags::LAST_SEGMENT;
+    // forward read flags for ISR
+    let isr_f1_flags = LazyCell::new(|| Flags::REVERSE_COMPLEMENTED | Flags::FIRST_SEGMENT);
+    let isr_f2_flags = LazyCell::new(|| Flags::MATE_REVERSE_COMPLEMENTED | Flags::LAST_SEGMENT);
 
-        // reverse read flags for ISR
-        static ref ISR_R1_FLAGS: Flags = Flags::FIRST_SEGMENT | Flags::MATE_REVERSE_COMPLEMENTED;
-        static ref ISR_R2_FLAGS: Flags = Flags::REVERSE_COMPLEMENTED | Flags::LAST_SEGMENT;
-    }
+    // reverse read flags for ISR
+    let isr_r1_flags = LazyCell::new(|| Flags::FIRST_SEGMENT | Flags::MATE_REVERSE_COMPLEMENTED);
+    let isr_r2_flags = LazyCell::new(|| Flags::REVERSE_COMPLEMENTED | Flags::LAST_SEGMENT);
 
     match lib {
         LibFragmentType::Isr => {
-            if flags.contains(*ISR_F1_FLAGS) | flags.contains(*ISR_F2_FLAGS) {
+            if flags.contains(*isr_f1_flags) | flags.contains(*isr_f2_flags) {
                 Ok(Strand::Forward)
-            } else if flags.contains(*ISR_R1_FLAGS) | flags.contains(*ISR_R2_FLAGS) {
+            } else if flags.contains(*isr_r1_flags) | flags.contains(*isr_r2_flags) {
                 Ok(Strand::Reverse)
             } else {
                 panic!("Unexpected flag sets: {:?}", flags);

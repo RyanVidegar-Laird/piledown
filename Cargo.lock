@@ -1451,7 +1451,6 @@ dependencies = [
  "fnv",
  "futures",
  "indexmap",
- "lazy_static",
  "log",
  "noodles",
  "parquet",
