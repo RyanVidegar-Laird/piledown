@@ -56,14 +56,6 @@
         });
 
 
-        piledown-py = pkgs.python3.pkgs.buildPythonPackage {
-          inherit pname version;
-          src = ./piledown;
-          propagatedBuildInputs = with pkgs.python3Packages; [ pyarrow ];
-          pyproject = false;
-          doCheck = false;
-        };
-
         python-packages = with pkgs.python3Packages; [
           pyarrow
           seaborn
@@ -79,11 +71,13 @@
           ruff-lsp
           pythonEnv
         ];
+        
+        piledown-py = (pkgs.python3Packages.callPackage ./pkgs/piledown-py.nix {});
         pythonTestFHSEnv = pkgs.buildFHSEnv {
           name = "piledown";
           targetPkgs = pkgs: with pkgs; [
-            python3
-          ] ++ devPkgs;
+            (python3.withPackages (ps: [ piledown-py ]))
+          ];
         };
       in
       {
@@ -119,15 +113,11 @@
         packages = {
           default = my-crate;
           bin = pkgs.callPackage ./pkgs/piledown-bin.nix {};
-          pypiledown = piledown-py;
-        };
-
-        apps.default = flake-utils.lib.mkApp {
-          drv = my-crate;
+          lib = pkgs.callPackage ./pkgs/piledown-lib.nix {};
+          py = piledown-py;
         };
 
         devShells.default = craneLib.devShell {
-          # Inherit inputs from checks.
           checks = self.checks.${system};
           packages = devPkgs;
         };

@@ -18,7 +18,7 @@ rustPlatform.buildRustPackage {
   };
 
   cargoBuildFlags = [
-    "--bin" "piledown"
+    "--lib"
   ];
 
   cargoHash = "sha256-CmNKzfbc3U+GoVqjVhpmT4WNSHyc/Nwg9XhDahzvJv0=";
