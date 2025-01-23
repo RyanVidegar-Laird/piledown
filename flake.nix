@@ -7,14 +7,12 @@
 
     crane = {
       url = "github:ipetkov/crane";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
       };
     };
 
@@ -120,6 +118,7 @@
 
         packages = {
           default = my-crate;
+          bin = pkgs.callPackage ./pkgs/piledown-bin.nix {};
           pypiledown = piledown-py;
         };
 

@@ -1,6 +1,8 @@
 /target
 /tests/rawData/
 
+result
+
 /.direnv/
 /.venv/
 
