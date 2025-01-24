@@ -33,6 +33,8 @@
           overlays = [ (import rust-overlay) ];
         };
 
+        inherit (pkgs) lib;
+
         rustTarget = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "rust-analyzer" ];
         };
@@ -50,11 +52,41 @@
         # all of that work (e.g. via cachix) when running in CI
         cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 
-        my-crate = craneLib.buildPackage (commonArgs // {
-          inherit pname version cargoArtifacts;
+        individualCrateArgs = commonArgs // {
+          inherit cargoArtifacts;
+          inherit (craneLib.crateNameFromCargoToml { src = commonArgs.src; }) version;
+          # NB: we disable tests since we'll run them all via cargo-nextest
           doCheck = false;
-        });
+        };
 
+        fileSetForCrate = crate: lib.fileset.toSource {
+          root = ./.;
+          fileset = lib.fileset.unions [
+            ./Cargo.toml
+            ./Cargo.lock
+            (craneLib.fileset.commonCargoSources ./crates/libpiledown)
+            (craneLib.fileset.commonCargoSources crate)
+          ];
+        };
+
+        # Build the top-level crates of the workspace as individual derivations.
+        # This allows consumers to only depend on (and build) only what they need.
+        # Though it is possible to build the entire workspace as a single derivation,
+        # so this is left up to you on how to organize things
+        #
+        # Note that the cargo workspace must define `workspace.members` using wildcards,
+        # otherwise, omitting a crate (like we do below) will result in errors since
+        # cargo won't be able to find the sources for all members.
+        my-cli = craneLib.buildPackage (individualCrateArgs // {
+          pname = "piledown";
+          cargoExtraArgs = "-p piledown";
+          src = fileSetForCrate ./crates/piledown;
+        });
+        my-pylib = craneLib.buildPackage (individualCrateArgs // {
+          pname = "pyledown";
+          cargoExtraArgs = "-p pyledown";
+          src = fileSetForCrate ./crates/pyledown;
+        });
 
         python-packages = with pkgs.python3Packages; [
           pyarrow
@@ -83,35 +115,34 @@
       {
         formatter = pkgs.nixpkgs-fmt;
         checks = {
-          inherit my-crate;
+          inherit my-cli my-pylib;
 
-          my-crate-clippy = craneLib.cargoClippy (commonArgs // {
+          my-workspace-clippy = craneLib.cargoClippy (commonArgs // {
             inherit cargoArtifacts;
             cargoClippyExtraArgs = "--all-targets -- --deny warnings";
           });
 
-          my-crate-doc = craneLib.cargoDoc (commonArgs // {
+          my-workspace-doc = craneLib.cargoDoc (commonArgs // {
             inherit cargoArtifacts;
           });
 
-          my-crate-fmt = craneLib.cargoFmt {
+          my-workspace-fmt = craneLib.cargoFmt {
             src = commonArgs.src;
           };
 
-          my-crate-nextest = craneLib.cargoNextest (commonArgs // {
+          my-workspace-nextest = craneLib.cargoNextest (commonArgs // {
             inherit cargoArtifacts;
             partitions = 1;
             partitionType = "count";
           });
 
-          my-crate-audit = craneLib.cargoAudit {
+          my-workspace-audit = craneLib.cargoAudit {
             inherit advisory-db;
             src = commonArgs.src;
           };
         };
 
         packages = {
-          default = my-crate;
           bin = pkgs.callPackage ./pkgs/piledown-bin.nix {};
           lib = pkgs.callPackage ./pkgs/piledown-lib.nix {};
           py = piledown-py;

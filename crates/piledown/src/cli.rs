@@ -1,5 +1,5 @@
 use clap::Parser;
-use piledown::structs::{LibFragmentType, OutputFormat, Strand};
+use libpiledown::structs::{LibFragmentType, OutputFormat, Strand};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = include_str!("../assets/logo.txt"))]

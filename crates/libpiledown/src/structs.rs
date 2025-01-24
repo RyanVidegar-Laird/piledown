@@ -264,25 +264,3 @@ impl Pile {
         Ok(())
     }
 }
-
-impl TryFrom<&crate::piledown::PileParams> for Pile {
-    type Error = &'static str;
-    fn try_from(item: &crate::piledown::PileParams) -> std::result::Result<Self, Self::Error> {
-        let region = item.region.parse();
-        let exclude_flags: Option<Flags> = if let Some(exclude) = item.exclude_flags {
-            let exclude_flags = Flags::from(exclude);
-            Some(exclude_flags)
-        } else {
-            None
-        };
-        match region {
-            Ok(reg) => Ok(Pile::new(
-                item.input_bam.clone(),
-                reg,
-                item.strand,
-                exclude_flags,
-            )),
-            Err(_e) => Err("Could not cast PileParms to Pile"),
-        }
-    }
-}

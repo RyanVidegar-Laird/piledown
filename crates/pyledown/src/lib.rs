@@ -1,53 +1,16 @@
-pub mod structs;
-
-use anyhow::{anyhow, Result};
-use noodles::sam::alignment::record::Flags;
-use std::cell::LazyCell;
-use structs::{LibFragmentType, Strand};
-
-pub fn get_strand(lib: LibFragmentType, flags: Flags) -> Result<Strand> {
-    if !flags.is_segmented() | !flags.is_properly_segmented() {
-        return Err(anyhow!("not enough info to determine strand"));
-    }
-
-    // The below bitflags are known at compile time, but hardcoding them is less
-    // reader friendly. Instead, use a LazyCell to only eval them once during runtime
-
-    // forward read flags for ISR
-    let isr_f1_flags = LazyCell::new(|| Flags::REVERSE_COMPLEMENTED | Flags::FIRST_SEGMENT);
-    let isr_f2_flags = LazyCell::new(|| Flags::MATE_REVERSE_COMPLEMENTED | Flags::LAST_SEGMENT);
-
-    // reverse read flags for ISR
-    let isr_r1_flags = LazyCell::new(|| Flags::FIRST_SEGMENT | Flags::MATE_REVERSE_COMPLEMENTED);
-    let isr_r2_flags = LazyCell::new(|| Flags::REVERSE_COMPLEMENTED | Flags::LAST_SEGMENT);
-
-    match lib {
-        LibFragmentType::Isr => {
-            if flags.contains(*isr_f1_flags) | flags.contains(*isr_f2_flags) {
-                Ok(Strand::Forward)
-            } else if flags.contains(*isr_r1_flags) | flags.contains(*isr_r2_flags) {
-                Ok(Strand::Reverse)
-            } else {
-                panic!("Unexpected flag sets: {:?}", flags);
-            }
-        }
-        LibFragmentType::Isf => todo!(),
-    }
-}
-
 #[pyo3::pymodule]
 /// Rust bindings for `piledown` -- a simple utility to get coverage of matched *and* skipped bases from RNASeq BAMs.
 mod piledown {
     use std::fmt::Display;
     use std::fmt::Formatter;
 
-    #[pymodule_export]
-    use crate::structs::LibFragmentType;
-    use crate::structs::Pile;
-    #[pymodule_export]
-    use crate::structs::Strand;
     use arrow::array::RecordBatch;
     use arrow::pyarrow::PyArrowType;
+    #[pymodule_export]
+    use libpiledown::structs::LibFragmentType;
+    use libpiledown::structs::Pile;
+    #[pymodule_export]
+    use libpiledown::structs::Strand;
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
     use pyo3::types::PyString;
@@ -127,6 +90,28 @@ mod piledown {
                 self.lib_fragment_type,
                 self.exclude_flags
             )
+        }
+    }
+}
+
+impl TryFrom<&PileParams> for Pile {
+    type Error = &'static str;
+    fn try_from(item: &PileParams) -> std::result::Result<Self, Self::Error> {
+        let region = item.region.parse();
+        let exclude_flags: Option<Flags> = if let Some(exclude) = item.exclude_flags {
+            let exclude_flags = Flags::from(exclude);
+            Some(exclude_flags)
+        } else {
+            None
+        };
+        match region {
+            Ok(reg) => Ok(Pile::new(
+                item.input_bam.clone(),
+                reg,
+                item.strand,
+                exclude_flags,
+            )),
+            Err(_e) => Err("Could not cast PileParms to Pile"),
         }
     }
 }

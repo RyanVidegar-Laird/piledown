@@ -1,0 +1,18 @@
+[package]
+name = "libpiledown"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow = "1.0.95"
+arrow = { version = "54.0.0", features = ["pyarrow"] }
+fnv = "1.0.7"
+futures = "0.3.31"
+indexmap = { version = "2.7.1", features = ["serde"] }
+noodles = { version = "0.87.0", features = ["core", "sam", "bam", "async"] }
+parquet = "54.0.0"
+strum = { version = "0.26.3", features = ["derive"] }
+strum_macros = "0.26.4"
