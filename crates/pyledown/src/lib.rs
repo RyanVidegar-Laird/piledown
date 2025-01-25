@@ -1,6 +1,6 @@
 #[pyo3::pymodule]
 /// Rust bindings for `piledown` -- a simple utility to get coverage of matched *and* skipped bases from RNASeq BAMs.
-mod piledown {
+mod pyledown {
     use std::fmt::Display;
     use std::fmt::Formatter;
 
@@ -14,6 +14,8 @@ mod piledown {
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
     use pyo3::types::PyString;
+
+    use noodles::sam::alignment::record::Flags;
 
     #[derive(Debug, Clone)]
     #[pyclass(str)]
@@ -92,26 +94,25 @@ mod piledown {
             )
         }
     }
-}
-
-impl TryFrom<&PileParams> for Pile {
-    type Error = &'static str;
-    fn try_from(item: &PileParams) -> std::result::Result<Self, Self::Error> {
-        let region = item.region.parse();
-        let exclude_flags: Option<Flags> = if let Some(exclude) = item.exclude_flags {
-            let exclude_flags = Flags::from(exclude);
-            Some(exclude_flags)
-        } else {
-            None
-        };
-        match region {
-            Ok(reg) => Ok(Pile::new(
-                item.input_bam.clone(),
-                reg,
-                item.strand,
-                exclude_flags,
-            )),
-            Err(_e) => Err("Could not cast PileParms to Pile"),
+    impl TryFrom<&PileParams> for Pile {
+        type Error = &'static str;
+        fn try_from(item: &PileParams) -> std::result::Result<Self, Self::Error> {
+            let region = item.region.parse();
+            let exclude_flags: Option<Flags> = if let Some(exclude) = item.exclude_flags {
+                let exclude_flags = Flags::from(exclude);
+                Some(exclude_flags)
+            } else {
+                None
+            };
+            match region {
+                Ok(reg) => Ok(Pile::new(
+                    item.input_bam.clone(),
+                    reg,
+                    item.strand,
+                    exclude_flags,
+                )),
+                Err(_e) => Err("Could not cast PileParms to Pile"),
+            }
         }
     }
 }

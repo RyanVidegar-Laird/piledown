@@ -11,26 +11,32 @@ use strum_macros::AsRefStr;
 use anyhow::Result;
 use arrow::array::{GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Builder};
 use arrow::datatypes::{DataType, Field, Int8Type, Schema};
-use clap::ValueEnum;
 use noodles::sam::alignment::record::Flags;
 use noodles::{bam::Record, core::Region, sam::alignment::record::cigar::op::Kind};
 
 use crate::get_strand;
+
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
+
+#[cfg(feature = "cli")]
+use clap::ValueEnum;
 
 type FnvIndexMap<K, V> = IndexMap<K, V, FnvBuildHasher>;
 
 /// Type of library preperation protocol. See [Salmon Docs](https://salmon.readthedocs.io/en/latest/library_type.html)
-#[pyclass(eq, eq_int)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int))]
+#[cfg_attr(feature = "cli", derive(ValueEnum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LibFragmentType {
     Isf,
     Isr,
 }
 
 /// Which strand to use; be careful to select correct [library fragment type](struct@LibFragmentType)
-#[pyclass(eq, eq_int)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum, AsRefStr)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int))]
+#[cfg_attr(feature = "cli", derive(ValueEnum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, AsRefStr)]
 pub enum Strand {
     #[strum(serialize = "+")]
     Forward,
@@ -40,7 +46,8 @@ pub enum Strand {
     Either,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+#[cfg_attr(feature = "cli", derive(ValueEnum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OutputFormat {
     Tsv,
     Arrow,
@@ -188,7 +195,7 @@ impl Pile {
                     Kind::Deletion => {
                         for _ in 1..=op.len() {
                             if let Some(bp) = self.coverage.get_mut(&current_pos) {
-                                bp.up += 1;
+                                bp.down += 1;
                             }
                             current_pos += 1;
                         }

@@ -26,6 +26,8 @@ fn main() -> Result<()> {
 
     let region: Region = cli.region.parse()?;
     debug!("instantiating Pile");
+    // TODO! Remove direct noodles import, instead make PileParams generic
+    // i.e. not just for the python lib.
     let mut pile = Pile::new(cli.input.clone(), region.clone(), cli.strand, exclude_flags);
     pile.generate()?;
 
