@@ -108,7 +108,7 @@ impl Pile {
         };
 
         for rec in query.into_iter() {
-            self.update(&rec.unwrap())?
+            let _res = self.update(&rec.unwrap());
         }
         Ok(())
     }
