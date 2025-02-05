@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 arrow = { version = "54.0.0", features = ["pyarrow"] }
-libpiledown = {path = "../libpiledown", features = [ "python" ]}
+piledown = {path = "../piledown", features = [ "python" ]}
 noodles = { version = "0.87.0", features = ["core", "sam", "bam"] }
 anyhow = "1.0.95"
 pyo3 = { version = "0.23.4", features = ["extension-module", "anyhow", "abi3-py38"] }

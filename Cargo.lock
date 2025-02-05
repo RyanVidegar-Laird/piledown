@@ -921,24 +921,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8355be11b20d696c8f18f6cc018c4e372165b1fa8126cef092399c9951984ffa"
 
 [[package]]
-name = "libpiledown"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arrow",
- "clap",
- "csv",
- "fnv",
- "futures",
- "indexmap",
- "noodles",
- "parquet",
- "pyo3",
- "strum",
- "strum_macros",
-]
-
-[[package]]
 name = "log"
 version = "0.4.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1188,14 +1170,17 @@ name = "piledown"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arrow",
  "clap",
- "clap-verbosity-flag",
  "csv",
- "env_logger",
- "libpiledown",
- "log",
+ "fnv",
+ "futures",
+ "indexmap",
  "noodles",
- "serde",
+ "parquet",
+ "pyo3",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -1215,6 +1200,21 @@ name = "pkg-config"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
+
+[[package]]
+name = "pldn"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "clap-verbosity-flag",
+ "csv",
+ "env_logger",
+ "log",
+ "noodles",
+ "piledown",
+ "serde",
+]
 
 [[package]]
 name = "portable-atomic"
@@ -1237,8 +1237,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arrow",
- "libpiledown",
  "noodles",
+ "piledown",
  "pyo3",
  "serde",
 ]

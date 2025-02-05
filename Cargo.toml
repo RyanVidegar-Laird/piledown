@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/piledown", "crates/libpiledown", "crates/pyledown"]
+members = ["crates/pldn", "crates/piledown", "crates/pyledown"]
 resolver = "2"
 
 [workspace.package]

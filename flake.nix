@@ -64,7 +64,7 @@
           fileset = lib.fileset.unions [
             ./Cargo.toml
             ./Cargo.lock
-            (craneLib.fileset.commonCargoSources ./crates/libpiledown)
+            (craneLib.fileset.commonCargoSources ./crates/piledown)
             (craneLib.fileset.commonCargoSources crate)
           ];
         };
@@ -78,9 +78,9 @@
         # otherwise, omitting a crate (like we do below) will result in errors since
         # cargo won't be able to find the sources for all members.
         my-cli = craneLib.buildPackage (individualCrateArgs // {
-          pname = "piledown";
+          pname = "pldn";
           cargoExtraArgs = "-p piledown";
-          src = fileSetForCrate ./crates/piledown;
+          src = fileSetForCrate ./crates/pldn;
         });
         my-pylib = craneLib.buildPackage (individualCrateArgs // {
           pname = "pyledown";
@@ -104,13 +104,6 @@
           pythonEnv
         ];
         
-        piledown-py = (pkgs.python3Packages.callPackage ./pkgs/piledown-py.nix {});
-        pythonTestFHSEnv = pkgs.buildFHSEnv {
-          name = "piledown";
-          targetPkgs = pkgs: with pkgs; [
-            (python3.withPackages (ps: [ piledown-py ]))
-          ];
-        };
       in
       {
         formatter = pkgs.nixpkgs-fmt;
@@ -143,15 +136,12 @@
         };
 
         packages = {
-          bin = pkgs.callPackage ./pkgs/piledown-bin.nix {};
-          lib = pkgs.callPackage ./pkgs/piledown-lib.nix {};
-          py = piledown-py;
+          default = my-cli;
         };
 
         devShells.default = craneLib.devShell {
           checks = self.checks.${system};
           packages = devPkgs;
         };
-        devShells.pyFHS = pythonTestFHSEnv.env;
       });
 }

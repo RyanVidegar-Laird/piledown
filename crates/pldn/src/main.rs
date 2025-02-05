@@ -3,9 +3,9 @@ mod cli;
 use crate::cli::*;
 use anyhow::Result;
 use clap::Parser;
-use libpiledown::structs::*;
 use log::{debug, info};
 use noodles::{core::Region, sam::alignment::record::Flags};
+use piledown::structs::*;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();

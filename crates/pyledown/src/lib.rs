@@ -7,10 +7,10 @@ mod pyledown {
     use arrow::array::RecordBatch;
     use arrow::pyarrow::PyArrowType;
     #[pymodule_export]
-    use libpiledown::structs::LibFragmentType;
-    use libpiledown::structs::Pile;
+    use piledown::structs::LibFragmentType;
+    use piledown::structs::Pile;
     #[pymodule_export]
-    use libpiledown::structs::Strand;
+    use piledown::structs::Strand;
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
     use pyo3::types::PyString;
