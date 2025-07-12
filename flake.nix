@@ -2,7 +2,7 @@
   description = "Pileup... but down too.";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/25.05";
     flake-utils.url = "github:numtide/flake-utils";
 
     crane = {
@@ -100,7 +100,7 @@
           maturin
           samtools
           pyright
-          ruff-lsp
+          ruff
           pythonEnv
         ];
         
