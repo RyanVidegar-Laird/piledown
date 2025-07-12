@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-arrow = { version = "54.0.0", features = ["pyarrow"] }
-piledown = {path = "../piledown", features = [ "python" ]}
-noodles = { version = "0.87.0", features = ["core", "sam", "bam"] }
-anyhow = "1.0.95"
-pyo3 = { version = "0.23.4", features = ["extension-module", "anyhow", "abi3-py38"] }
-serde = { version = "1.0.217", features = ["derive"] }
+arrow.workspace = true
+piledown = {workspace = true, features = ["python"]}
+noodles.workspace = true
+anyhow.workspace = true
+pyo3.workspace = true
+serde.workspace = true
