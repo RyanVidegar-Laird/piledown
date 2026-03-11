@@ -1,3 +1,4 @@
+pub mod types;
 pub mod structs;
 
 use anyhow::{anyhow, Result};
