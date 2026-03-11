@@ -1,38 +1,83 @@
 mod cli;
 
-use crate::cli::*;
-use anyhow::Result;
+use crate::cli::Cli;
+use anyhow::{anyhow, Result};
 use clap::Parser;
-use log::{debug, info};
-use noodles::{core::Region, sam::alignment::record::Flags};
-use piledown::structs::*;
+use log::info;
+use noodles::sam::alignment::record::Flags;
+use piledown::engine::{runtime, EngineConfig, PileEngine};
+use piledown::output::{to_record_batch, write_output};
+use piledown::region::{read_regions_tsv, PileRegion};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
     let mut logger = env_logger::Builder::from_default_env();
     if cli.verbose.is_present() {
         logger.filter_level(cli.verbose.log_level_filter());
     }
     logger.init();
-    info!("input: {:?}", cli.input.clone());
 
-    let exclude_flags: Option<Flags> = if let Some(exclude) = cli.exclude {
-        let exclude_flags = Flags::from(exclude);
-        info!("excluding reads matching any: {:?}", exclude_flags);
-        Some(exclude_flags)
+    let exclude_flags = cli.exclude.map(Flags::from);
+
+    // Build region list
+    let regions = if let Some(region_str) = &cli.region {
+        let strand = cli
+            .strand
+            .ok_or_else(|| anyhow!("--strand required with --region"))?;
+        let region: noodles::core::Region = region_str.parse()?;
+        let seq = String::from_utf8(region.name().to_vec())
+            .map_err(|e| anyhow!("non-UTF8 sequence name: {}", e))?;
+        let interval = region.interval();
+        let start = interval
+            .start()
+            .ok_or_else(|| anyhow!("region missing start"))?
+            .get() as u64;
+        let end = interval
+            .end()
+            .ok_or_else(|| anyhow!("region missing end"))?
+            .get() as u64;
+        vec![PileRegion::new(seq, start, end, cli.name.clone(), strand)]
+    } else if let Some(path) = &cli.regions_file {
+        let file = std::fs::File::open(path)?;
+        read_regions_tsv(file)?
     } else {
-        None
+        return Err(anyhow!("provide either --region or --regions-file"));
     };
 
-    let region: Region = cli.region.parse()?;
-    debug!("instantiating Pile");
-    // TODO! Remove direct noodles import, instead make PileParams generic
-    // i.e. not just for the python lib.
-    let mut pile = Pile::new(cli.input.clone(), region.clone(), cli.strand, exclude_flags);
-    pile.generate()?;
+    info!("processing {} region(s)", regions.len());
 
-    let format = cli.output_format;
-    pile.write(format)?;
+    let config = EngineConfig {
+        bam_path: cli.input,
+        exclude_flags,
+        lib_type: cli.lib_fragment_type,
+        concurrency: cli.concurrency,
+    };
+
+    let engine = PileEngine::new(config);
+    let rt = runtime();
+
+    let stdout = std::io::stdout();
+
+    if cli.output_format == piledown::types::OutputFormat::Tsv {
+        // Streaming mode for TSV
+        let mut first = true;
+        rt.block_on(engine.run_streaming(regions, |region, map| {
+            let batch = to_record_batch(&region, &map)?;
+            write_output(&batch, cli.output_format, &stdout, first)?;
+            first = false;
+            Ok(())
+        }))?;
+    } else {
+        // Collecting mode for Arrow/Parquet (need single batch)
+        let results = rt.block_on(engine.run_collect(regions))?;
+        let batches: Vec<_> = results
+            .iter()
+            .map(|(r, m)| to_record_batch(r, m))
+            .collect::<Result<Vec<_>>>()?;
+        let combined = arrow::compute::concat_batches(&batches[0].schema(), &batches)?;
+        write_output(&combined, cli.output_format, stdout, true)?;
+    }
 
     info!("Done!");
     Ok(())

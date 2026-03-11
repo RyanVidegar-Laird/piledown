@@ -5,8 +5,7 @@ edition = "2021"
 
 [dependencies]
 arrow.workspace = true
-piledown = {workspace = true, features = ["python"]}
+piledown = {workspace = true, features = ["python", "async"]}
 noodles.workspace = true
 anyhow.workspace = true
 pyo3.workspace = true
-serde.workspace = true

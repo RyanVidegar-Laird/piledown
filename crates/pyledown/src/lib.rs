@@ -7,15 +7,17 @@ mod pyledown {
     use arrow::array::RecordBatch;
     use arrow::pyarrow::PyArrowType;
     #[pymodule_export]
-    use piledown::structs::LibFragmentType;
-    use piledown::structs::Pile;
+    use piledown::types::LibFragmentType;
     #[pymodule_export]
-    use piledown::structs::Strand;
+    use piledown::types::Strand;
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
     use pyo3::types::PyString;
 
     use noodles::sam::alignment::record::Flags;
+    use piledown::engine::{runtime, EngineConfig, PileEngine};
+    use piledown::output::to_record_batch;
+    use piledown::region::PileRegion;
 
     #[derive(Debug, Clone)]
     #[pyclass(str)]
@@ -52,9 +54,7 @@ mod pyledown {
             })
         }
         fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
-            // This is the equivalent of `self.__class__.__name__` in Python.
             let class_name: Bound<'_, PyString> = slf.get_type().qualname()?;
-            // To access fields of the Rust struct, we need to borrow the `PyCell`.
             Ok(format!(
                 "{}({:#?}, {:#?}, {:#?}, {:#?}, {:#?})",
                 class_name,
@@ -67,15 +67,50 @@ mod pyledown {
         }
 
         fn generate(&self) -> PyResult<PyArrowType<RecordBatch>> {
-            let mut pile =
-                Pile::try_from(self).map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let noodle_region: noodles::core::Region =
+                self.region
+                    .parse()
+                    .map_err(|e: noodles::core::region::ParseError| {
+                        PyValueError::new_err(e.to_string())
+                    })?;
+            let seq = String::from_utf8(noodle_region.name().to_vec())
+                .map_err(|e| PyValueError::new_err(format!("non-UTF8 sequence name: {e}")))?;
+            let interval = noodle_region.interval();
+            let start = interval
+                .start()
+                .ok_or_else(|| PyValueError::new_err("region missing start"))?
+                .get() as u64;
+            let end = interval
+                .end()
+                .ok_or_else(|| PyValueError::new_err("region missing end"))?
+                .get() as u64;
 
-            pile.generate()?;
-            let batch = pile.to_record_batch()?;
+            let pile_region = PileRegion::new(seq, start, end, "region".into(), self.strand);
+
+            let config = EngineConfig {
+                bam_path: self.input_bam.clone(),
+                exclude_flags: self.exclude_flags.map(Flags::from),
+                lib_type: self.lib_fragment_type,
+                concurrency: 1,
+            };
+
+            let engine = PileEngine::new(config);
+            let rt = runtime();
+            let results = rt
+                .block_on(engine.run_collect(vec![pile_region]))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+            let (region, map) = results
+                .into_iter()
+                .next()
+                .ok_or_else(|| PyValueError::new_err("no results"))?;
+            let batch =
+                to_record_batch(&region, &map).map_err(|e| PyValueError::new_err(e.to_string()))?;
 
             Ok(PyArrowType(batch))
         }
     }
+
     impl Display for PileParams {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             write!(
@@ -92,27 +127,6 @@ mod pyledown {
                 self.lib_fragment_type,
                 self.exclude_flags
             )
-        }
-    }
-    impl TryFrom<&PileParams> for Pile {
-        type Error = &'static str;
-        fn try_from(item: &PileParams) -> std::result::Result<Self, Self::Error> {
-            let region = item.region.parse();
-            let exclude_flags: Option<Flags> = if let Some(exclude) = item.exclude_flags {
-                let exclude_flags = Flags::from(exclude);
-                Some(exclude_flags)
-            } else {
-                None
-            };
-            match region {
-                Ok(reg) => Ok(Pile::new(
-                    item.input_bam.clone(),
-                    reg,
-                    item.strand,
-                    exclude_flags,
-                )),
-                Err(_e) => Err("Could not cast PileParms to Pile"),
-            }
         }
     }
 }
