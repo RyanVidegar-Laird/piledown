@@ -2,6 +2,7 @@ pub mod types;
 pub mod coverage;
 pub mod cigar;
 pub mod strand;
+pub mod filter;
 pub mod structs;
 
 use anyhow::{anyhow, Result};
