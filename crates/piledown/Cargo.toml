@@ -12,14 +12,16 @@ arrow.workspace = true
 clap = {workspace = true, optional = true}
 csv.workspace = true
 fnv.workspace = true
-futures.workspace = true
+futures = { workspace = true, optional = true }
 indexmap.workspace = true
 noodles.workspace = true
 parquet.workspace = true
 pyo3 = {workspace = true, optional = true}
 strum.workspace = true
 strum_macros.workspace = true
+tokio = { workspace = true, optional = true }
 
 [features]
 python = ["dep:pyo3"]
 cli = ["dep:clap"]
+async = ["dep:tokio", "dep:futures"]
