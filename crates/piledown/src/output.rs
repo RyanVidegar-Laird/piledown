@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use arrow::array::{
     ArrayAccessor, GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Builder,
 };
@@ -71,52 +71,49 @@ pub fn write_output(
                 .delimiter(b'\t')
                 .from_writer(writer);
             if write_header {
-                w.write_record(["name", "seq", "pos", "strand", "up", "down"])?;
+                w.write_record(["name", "seq", "strand", "pos", "up", "down"])?;
             }
 
+            let name_col = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<arrow::array::StringArray>()
+                .ok_or_else(|| anyhow!("expected StringArray for 'name' column"))?;
+            let seq_col = batch
+                .column(1)
+                .as_any()
+                .downcast_ref::<arrow::array::StringArray>()
+                .ok_or_else(|| anyhow!("expected StringArray for 'seq' column"))?;
+            let strand_arr = batch
+                .column(2)
+                .as_any()
+                .downcast_ref::<arrow::array::DictionaryArray<Int8Type>>()
+                .ok_or_else(|| anyhow!("expected DictionaryArray for 'strand' column"))?;
+            let strand_col = strand_arr
+                .downcast_dict::<arrow::array::StringArray>()
+                .ok_or_else(|| anyhow!("expected StringArray values in 'strand' dictionary"))?;
             let pos_col = batch
                 .column(3)
                 .as_any()
                 .downcast_ref::<arrow::array::UInt64Array>()
-                .unwrap();
+                .ok_or_else(|| anyhow!("expected UInt64Array for 'pos' column"))?;
             let up_col = batch
                 .column(4)
                 .as_any()
                 .downcast_ref::<arrow::array::UInt64Array>()
-                .unwrap();
+                .ok_or_else(|| anyhow!("expected UInt64Array for 'up' column"))?;
             let down_col = batch
                 .column(5)
                 .as_any()
                 .downcast_ref::<arrow::array::UInt64Array>()
-                .unwrap();
+                .ok_or_else(|| anyhow!("expected UInt64Array for 'down' column"))?;
 
             for i in 0..batch.num_rows() {
-                let name = batch
-                    .column(0)
-                    .as_any()
-                    .downcast_ref::<arrow::array::StringArray>()
-                    .unwrap()
-                    .value(i);
-                let seq = batch
-                    .column(1)
-                    .as_any()
-                    .downcast_ref::<arrow::array::StringArray>()
-                    .unwrap()
-                    .value(i);
-                let strand_arr = batch
-                    .column(2)
-                    .as_any()
-                    .downcast_ref::<arrow::array::DictionaryArray<Int8Type>>()
-                    .unwrap();
-                let strand_val = strand_arr
-                    .downcast_dict::<arrow::array::StringArray>()
-                    .unwrap()
-                    .value(i);
                 w.serialize((
-                    name,
-                    seq,
+                    name_col.value(i),
+                    seq_col.value(i),
+                    strand_col.value(i),
                     pos_col.value(i),
-                    strand_val,
                     up_col.value(i),
                     down_col.value(i),
                 ))?;

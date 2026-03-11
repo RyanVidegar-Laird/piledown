@@ -25,19 +25,11 @@ fn main() -> Result<()> {
         let strand = cli
             .strand
             .ok_or_else(|| anyhow!("--strand required with --region"))?;
-        let region: noodles::core::Region = region_str.parse()?;
-        let seq = String::from_utf8(region.name().to_vec())
-            .map_err(|e| anyhow!("non-UTF8 sequence name: {}", e))?;
-        let interval = region.interval();
-        let start = interval
-            .start()
-            .ok_or_else(|| anyhow!("region missing start"))?
-            .get() as u64;
-        let end = interval
-            .end()
-            .ok_or_else(|| anyhow!("region missing end"))?
-            .get() as u64;
-        vec![PileRegion::new(seq, start, end, cli.name.clone(), strand)]
+        vec![PileRegion::from_region_str(
+            region_str,
+            cli.name.clone(),
+            strand,
+        )?]
     } else if let Some(path) = &cli.regions_file {
         let file = std::fs::File::open(path)?;
         read_regions_tsv(file)?

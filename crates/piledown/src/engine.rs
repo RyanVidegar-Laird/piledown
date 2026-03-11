@@ -21,6 +21,7 @@ mod async_engine {
         pub bam_path: PathBuf,
         pub exclude_flags: Option<noodles::sam::alignment::record::Flags>,
         pub lib_type: crate::types::LibFragmentType,
+        /// Maximum number of regions to process concurrently via buffer_unordered.
         pub concurrency: usize,
     }
 

@@ -67,25 +67,9 @@ mod pyledown {
         }
 
         fn generate(&self) -> PyResult<PyArrowType<RecordBatch>> {
-            let noodle_region: noodles::core::Region =
-                self.region
-                    .parse()
-                    .map_err(|e: noodles::core::region::ParseError| {
-                        PyValueError::new_err(e.to_string())
-                    })?;
-            let seq = String::from_utf8(noodle_region.name().to_vec())
-                .map_err(|e| PyValueError::new_err(format!("non-UTF8 sequence name: {e}")))?;
-            let interval = noodle_region.interval();
-            let start = interval
-                .start()
-                .ok_or_else(|| PyValueError::new_err("region missing start"))?
-                .get() as u64;
-            let end = interval
-                .end()
-                .ok_or_else(|| PyValueError::new_err("region missing end"))?
-                .get() as u64;
-
-            let pile_region = PileRegion::new(seq, start, end, "region".into(), self.strand);
+            let pile_region =
+                PileRegion::from_region_str(&self.region, "region".into(), self.strand)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
             let config = EngineConfig {
                 bam_path: self.input_bam.clone(),

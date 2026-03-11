@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use noodles::core::Region;
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +22,25 @@ impl PileRegion {
             name,
             strand,
         }
+    }
+
+    /// Parse a noodles region string (e.g. "chr1:1000-2000") into a PileRegion.
+    pub fn from_region_str(region: &str, name: String, strand: Strand) -> Result<Self> {
+        let parsed: Region = region
+            .parse()
+            .map_err(|e: noodles::core::region::ParseError| anyhow!(e))?;
+        let seq = String::from_utf8(parsed.name().to_vec())
+            .map_err(|e| anyhow!("non-UTF8 sequence name: {}", e))?;
+        let interval = parsed.interval();
+        let start = interval
+            .start()
+            .ok_or_else(|| anyhow!("region missing start"))?
+            .get() as u64;
+        let end = interval
+            .end()
+            .ok_or_else(|| anyhow!("region missing end"))?
+            .get() as u64;
+        Ok(Self::new(seq, start, end, name, strand))
     }
 }
 
@@ -80,6 +99,22 @@ mod tests {
         assert_eq!(record.end, 25000);
         assert_eq!(record.name, "tes1");
         assert_eq!(record.strand, Strand::Forward);
+    }
+
+    #[test]
+    fn from_region_str_parses_correctly() {
+        let pr =
+            PileRegion::from_region_str("chr1:1000-2000", "test".into(), Strand::Forward).unwrap();
+        assert_eq!(pr.seq, "chr1");
+        assert_eq!(pr.start, 1000);
+        assert_eq!(pr.end, 2000);
+        assert_eq!(pr.name, "test");
+        assert_eq!(pr.strand, Strand::Forward);
+    }
+
+    #[test]
+    fn from_region_str_rejects_invalid() {
+        assert!(PileRegion::from_region_str("invalid", "test".into(), Strand::Forward).is_err());
     }
 
     #[test]

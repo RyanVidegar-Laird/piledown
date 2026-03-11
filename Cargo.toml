@@ -27,15 +27,3 @@ env_logger = "0.11.8"
 log = "0.4.27"
 
 piledown = {path = "./crates/piledown"}
-
-[workspace.dev-dependencies]
-criterion = { version = "0.5", features = ["async_tokio"] }
-
-[workspace.metadata.crane]
-name = "my-workspace"
-# [profile.release]
-# opt-level = 3
-# strip = "symbols"
-# codegen-units = 1
-# lto = true
-# panic = "abort"

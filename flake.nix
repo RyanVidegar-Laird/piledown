@@ -5,10 +5,6 @@
     nixpkgs.url = "github:NixOS/nixpkgs/25.05";
     flake-utils.url = "github:numtide/flake-utils";
 
-    crane = {
-      url = "github:ipetkov/crane";
-    };
-
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs = {
@@ -20,82 +16,61 @@
       url = "github:rustsec/advisory-db";
       flake = false;
     };
-
   };
 
-  outputs = { self, nixpkgs, flake-utils, crane, rust-overlay, advisory-db, ... }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, advisory-db, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pname = "piledown";
-        version = "0.1.0";
         pkgs = import nixpkgs {
           inherit system;
           overlays = [ (import rust-overlay) ];
         };
 
-        inherit (pkgs) lib;
-
-        rustTarget = pkgs.rust-bin.stable.latest.default.override {
+        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "rust-analyzer" ];
         };
 
-
-        craneLib = (crane.mkLib pkgs).overrideToolchain rustTarget;
-
-        # Common arguments are set here to avoid repeating them later
-        commonArgs = {
-          src = craneLib.cleanCargoSource ./.;
-          strictDeps = true;
-        };
-
-        # Build *just* the cargo dependencies, so we can reuse
-        # all of that work (e.g. via cachix) when running in CI
-        cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-
-        individualCrateArgs = commonArgs // {
-          inherit cargoArtifacts;
-          inherit (craneLib.crateNameFromCargoToml { src = commonArgs.src; }) version;
-          # NB: we disable tests since we'll run them all via cargo-nextest
-          doCheck = false;
-        };
-
-        fileSetForCrate = crate: lib.fileset.toSource {
-          root = ./.;
-          fileset = lib.fileset.unions [
-            ./Cargo.toml
-            ./Cargo.lock
-            (craneLib.fileset.commonCargoSources ./crates/piledown)
-            (craneLib.fileset.commonCargoSources crate)
-          ];
-        };
-
-        # Build the top-level crates of the workspace as individual derivations.
-        # This allows consumers to only depend on (and build) only what they need.
-        # Though it is possible to build the entire workspace as a single derivation,
-        # so this is left up to you on how to organize things
-        #
-        # Note that the cargo workspace must define `workspace.members` using wildcards,
-        # otherwise, omitting a crate (like we do below) will result in errors since
-        # cargo won't be able to find the sources for all members.
-        my-cli = craneLib.buildPackage (individualCrateArgs // {
+        # CLI package (python3 needed because pyo3-build-config resolves across the workspace)
+        pldn = pkgs.rustPlatform.buildRustPackage {
           pname = "pldn";
-          cargoExtraArgs = "-p piledown";
-          src = fileSetForCrate ./crates/pldn;
-        });
-        my-pylib = craneLib.buildPackage (individualCrateArgs // {
-          pname = "pyledown";
-          cargoExtraArgs = "-p pyledown";
-          src = fileSetForCrate ./crates/pyledown;
-        });
+          version = "0.1.0";
+          src = ./.;
+          cargoLock.lockFile = ./Cargo.lock;
+          cargoBuildFlags = [ "-p" "pldn" ];
+          nativeBuildInputs = [ python3 ];
+          doCheck = false; # tests run separately in checks
+        };
 
-        python-packages = with pkgs.python3Packages; [
+        # Python package
+        python3 = pkgs.python3;
+        pyledown = python3.pkgs.buildPythonPackage {
+          pname = "pyledown";
+          version = "0.1.0";
+          src = ./.;
+          pyproject = true;
+          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+            src = ./.;
+            hash = "sha256-f0ldhAITVvB6KN7DOoRCVSaE7bpsKMiBA8Pp3vS4/n0=";
+          };
+          nativeBuildInputs = with pkgs.rustPlatform; [
+            cargoSetupHook
+            maturinBuildHook
+          ];
+          dependencies = with python3.pkgs; [ pyarrow ];
+        };
+
+        # Shared source for check derivations
+        src = pkgs.lib.cleanSource ./.;
+
+        pythonEnv = python3.withPackages (ps: with ps; [
           pyarrow
           seaborn
-        ];
-        pythonEnv = pkgs.python3.withPackages (ps: python-packages);
+        ]);
+
         devPkgs = with pkgs; [
           cargo-edit
           cargo-generate
+          cargo-nextest
           duckdb
           maturin
           samtools
@@ -103,45 +78,81 @@
           ruff
           pythonEnv
         ];
-        
+
       in
       {
         formatter = pkgs.nixpkgs-fmt;
+
         checks = {
-          inherit my-cli my-pylib;
-
-          my-workspace-clippy = craneLib.cargoClippy (commonArgs // {
-            inherit cargoArtifacts;
-            cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-          });
-
-          my-workspace-doc = craneLib.cargoDoc (commonArgs // {
-            inherit cargoArtifacts;
-          });
-
-          my-workspace-fmt = craneLib.cargoFmt {
-            src = commonArgs.src;
+          clippy = pkgs.rustPlatform.buildRustPackage {
+            pname = "piledown-clippy";
+            version = "0.1.0";
+            inherit src;
+            cargoLock.lockFile = ./Cargo.lock;
+            nativeBuildInputs = [ python3 ];
+            doCheck = false;
+            buildPhase = ''
+              cargo clippy --all-targets -- --deny warnings
+            '';
+            installPhase = "mkdir -p $out";
           };
 
-          my-workspace-nextest = craneLib.cargoNextest (commonArgs // {
-            inherit cargoArtifacts;
-            partitions = 1;
-            partitionType = "count";
-          });
+          fmt = pkgs.stdenv.mkDerivation {
+            pname = "piledown-fmt";
+            version = "0.1.0";
+            inherit src;
+            nativeBuildInputs = [ rustToolchain ];
+            buildPhase = ''
+              cargo fmt -- --check
+            '';
+            installPhase = "mkdir -p $out";
+          };
 
-          my-workspace-audit = craneLib.cargoAudit {
-            inherit advisory-db;
-            src = commonArgs.src;
+          nextest = pkgs.rustPlatform.buildRustPackage {
+            pname = "piledown-nextest";
+            version = "0.1.0";
+            inherit src;
+            cargoLock.lockFile = ./Cargo.lock;
+            nativeBuildInputs = [ pkgs.cargo-nextest python3 ];
+            doCheck = false;
+            buildPhase = ''
+              cargo nextest run
+            '';
+            installPhase = "mkdir -p $out";
+          };
+
+          audit = pkgs.stdenv.mkDerivation {
+            pname = "piledown-audit";
+            version = "0.1.0";
+            inherit src;
+            nativeBuildInputs = [ pkgs.cargo-audit ];
+            buildPhase = ''
+              HOME=$TMPDIR cargo audit --db ${advisory-db}
+            '';
+            installPhase = "mkdir -p $out";
+          };
+
+          doc = pkgs.rustPlatform.buildRustPackage {
+            pname = "piledown-doc";
+            version = "0.1.0";
+            inherit src;
+            cargoLock.lockFile = ./Cargo.lock;
+            nativeBuildInputs = [ python3 ];
+            doCheck = false;
+            buildPhase = ''
+              cargo doc --no-deps
+            '';
+            installPhase = "mkdir -p $out";
           };
         };
 
         packages = {
-          default = my-cli;
+          default = pldn;
+          inherit pldn pyledown;
         };
 
-        devShells.default = craneLib.devShell {
-          checks = self.checks.${system};
-          packages = devPkgs;
+        devShells.default = pkgs.mkShell {
+          nativeBuildInputs = [ rustToolchain ] ++ devPkgs;
         };
       });
 }
