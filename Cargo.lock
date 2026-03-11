@@ -1448,6 +1448,7 @@ dependencies = [
  "noodles",
  "parquet",
  "pyo3",
+ "serde",
  "strum",
  "strum_macros",
  "tokio",
