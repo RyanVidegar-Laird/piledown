@@ -1,3 +1,5 @@
+use crate::cigar::CigarSpan;
+
 /// Per-base coverage counts.
 #[derive(Clone, Debug, Default)]
 pub struct Coverage {
@@ -50,6 +52,38 @@ impl CoverageMap {
         }
         self.counts.get_mut((pos - self.start) as usize)
     }
+
+    /// Apply CIGAR spans to update coverage counts.
+    /// Spans outside the region bounds are safely clipped.
+    pub fn apply_spans(&mut self, spans: &[CigarSpan]) {
+        for span in spans {
+            let (span_start, span_len, is_up) = match span {
+                CigarSpan::Match { start, len } => (*start, *len, true),
+                CigarSpan::Skip { start, len } => (*start, *len, false),
+            };
+
+            let span_end = span_start + span_len; // exclusive
+
+            // Clip to region bounds
+            let effective_start = span_start.max(self.start);
+            let effective_end = span_end.min(self.end + 1);
+
+            if effective_start >= effective_end {
+                continue;
+            }
+
+            let idx_start = (effective_start - self.start) as usize;
+            let idx_end = (effective_end - self.start) as usize;
+
+            for cov in &mut self.counts[idx_start..idx_end] {
+                if is_up {
+                    cov.up += 1;
+                } else {
+                    cov.down += 1;
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -94,5 +128,56 @@ mod tests {
         let map = CoverageMap::new(100, 100);
         assert_eq!(map.len(), 1);
         assert_eq!(map.get(100).unwrap().up, 0);
+    }
+
+    #[test]
+    fn apply_match_span() {
+        let mut map = CoverageMap::new(100, 109);
+        let spans = vec![CigarSpan::Match { start: 102, len: 3 }];
+        map.apply_spans(&spans);
+        assert_eq!(map.get(101).unwrap().up, 0);
+        assert_eq!(map.get(102).unwrap().up, 1);
+        assert_eq!(map.get(103).unwrap().up, 1);
+        assert_eq!(map.get(104).unwrap().up, 1);
+        assert_eq!(map.get(105).unwrap().up, 0);
+    }
+
+    #[test]
+    fn apply_skip_span() {
+        let mut map = CoverageMap::new(100, 109);
+        let spans = vec![CigarSpan::Skip { start: 103, len: 2 }];
+        map.apply_spans(&spans);
+        assert_eq!(map.get(103).unwrap().down, 1);
+        assert_eq!(map.get(104).unwrap().down, 1);
+        assert_eq!(map.get(105).unwrap().down, 0);
+    }
+
+    #[test]
+    fn apply_spans_clips_to_region_bounds() {
+        let mut map = CoverageMap::new(100, 104);
+        let spans = vec![CigarSpan::Match { start: 103, len: 10 }];
+        map.apply_spans(&spans);
+        assert_eq!(map.get(103).unwrap().up, 1);
+        assert_eq!(map.get(104).unwrap().up, 1);
+    }
+
+    #[test]
+    fn apply_spans_before_region_ignored() {
+        let mut map = CoverageMap::new(100, 104);
+        let spans = vec![CigarSpan::Match { start: 95, len: 3 }];
+        map.apply_spans(&spans);
+        for cov in map.counts.iter() {
+            assert_eq!(cov.up, 0);
+        }
+    }
+
+    #[test]
+    fn apply_spans_straddling_region_start() {
+        let mut map = CoverageMap::new(100, 104);
+        let spans = vec![CigarSpan::Match { start: 98, len: 5 }];
+        map.apply_spans(&spans);
+        assert_eq!(map.get(100).unwrap().up, 1);
+        assert_eq!(map.get(101).unwrap().up, 1);
+        assert_eq!(map.get(102).unwrap().up, 1);
     }
 }

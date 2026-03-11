@@ -1,5 +1,6 @@
 pub mod types;
 pub mod coverage;
+pub mod cigar;
 pub mod structs;
 
 use anyhow::{anyhow, Result};
@@ -30,7 +31,7 @@ pub fn get_strand(lib: LibFragmentType, flags: Flags) -> Result<Strand> {
             } else if flags.contains(*isr_r1_flags) | flags.contains(*isr_r2_flags) {
                 Ok(Strand::Reverse)
             } else {
-                panic!("Unexpected flag sets: {:?}", flags);
+                panic!("Unexpected flag sets: {flags:?}");
             }
         }
         LibFragmentType::Isf => todo!(),
