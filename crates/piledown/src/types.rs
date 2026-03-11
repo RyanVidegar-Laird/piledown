@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use strum_macros::{AsRefStr, EnumString};
 
 #[cfg(feature = "python")]
@@ -20,13 +21,16 @@ pub enum LibFragmentType {
 #[cfg_attr(feature = "python", pyclass(eq, eq_int))]
 #[cfg_attr(feature = "cli", derive(ValueEnum))]
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString,
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString, Serialize, Deserialize,
 )]
 pub enum Strand {
+    #[serde(rename = "+")]
     #[strum(serialize = "+")]
     Forward,
+    #[serde(rename = "-")]
     #[strum(serialize = "-")]
     Reverse,
+    #[serde(rename = ".")]
     #[strum(serialize = ".")]
     Either,
 }

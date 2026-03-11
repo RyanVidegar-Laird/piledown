@@ -17,6 +17,7 @@ indexmap.workspace = true
 noodles.workspace = true
 parquet.workspace = true
 pyo3 = {workspace = true, optional = true}
+serde.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
 tokio = { workspace = true, optional = true }
