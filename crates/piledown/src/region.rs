@@ -61,7 +61,10 @@ mod tests {
             strand: Strand::Forward,
         };
         let region: Region = pr.try_into().unwrap();
-        assert_eq!(<[u8] as AsRef<[u8]>>::as_ref(region.name().as_ref()), b"chr1");
+        assert_eq!(
+            <[u8] as AsRef<[u8]>>::as_ref(region.name().as_ref()),
+            b"chr1"
+        );
     }
 
     #[test]

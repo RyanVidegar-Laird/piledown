@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use arrow::array::{ArrayAccessor, GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Builder};
+use arrow::array::{
+    ArrayAccessor, GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Builder,
+};
 use arrow::datatypes::{DataType, Field, Int8Type, Schema};
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Encoding;
@@ -122,8 +124,7 @@ pub fn write_output(
             w.flush()?;
         }
         OutputFormat::Arrow => {
-            let mut w =
-                arrow::ipc::writer::FileWriter::try_new_buffered(writer, &batch.schema())?;
+            let mut w = arrow::ipc::writer::FileWriter::try_new_buffered(writer, &batch.schema())?;
             w.write(batch)?;
             w.flush()?;
             w.finish()?;

@@ -46,22 +46,27 @@ mod tests {
     fn simple_match() {
         let ops = vec![op(Kind::Match, 10)];
         let spans = cigar_spans(100, &ops);
-        assert_eq!(spans, vec![CigarSpan::Match { start: 100, len: 10 }]);
+        assert_eq!(
+            spans,
+            vec![CigarSpan::Match {
+                start: 100,
+                len: 10
+            }]
+        );
     }
 
     #[test]
     fn match_then_skip_then_match() {
-        let ops = vec![
-            op(Kind::Match, 5),
-            op(Kind::Skip, 3),
-            op(Kind::Match, 5),
-        ];
+        let ops = vec![op(Kind::Match, 5), op(Kind::Skip, 3), op(Kind::Match, 5)];
         let spans = cigar_spans(100, &ops);
-        assert_eq!(spans, vec![
-            CigarSpan::Match { start: 100, len: 5 },
-            CigarSpan::Skip { start: 105, len: 3 },
-            CigarSpan::Match { start: 108, len: 5 },
-        ]);
+        assert_eq!(
+            spans,
+            vec![
+                CigarSpan::Match { start: 100, len: 5 },
+                CigarSpan::Skip { start: 105, len: 3 },
+                CigarSpan::Match { start: 108, len: 5 },
+            ]
+        );
     }
 
     #[test]
@@ -72,10 +77,13 @@ mod tests {
             op(Kind::Match, 5),
         ];
         let spans = cigar_spans(100, &ops);
-        assert_eq!(spans, vec![
-            CigarSpan::Match { start: 100, len: 5 },
-            CigarSpan::Match { start: 105, len: 5 },
-        ]);
+        assert_eq!(
+            spans,
+            vec![
+                CigarSpan::Match { start: 100, len: 5 },
+                CigarSpan::Match { start: 105, len: 5 },
+            ]
+        );
     }
 
     #[test]
@@ -97,24 +105,27 @@ mod tests {
             op(Kind::Match, 5),
         ];
         let spans = cigar_spans(100, &ops);
-        assert_eq!(spans, vec![
-            CigarSpan::Match { start: 100, len: 5 },
-            CigarSpan::Skip { start: 105, len: 2 },
-            CigarSpan::Match { start: 107, len: 5 },
-        ]);
+        assert_eq!(
+            spans,
+            vec![
+                CigarSpan::Match { start: 100, len: 5 },
+                CigarSpan::Skip { start: 105, len: 2 },
+                CigarSpan::Match { start: 107, len: 5 },
+            ]
+        );
     }
 
     #[test]
     fn sequence_match_and_mismatch() {
-        let ops = vec![
-            op(Kind::SequenceMatch, 3),
-            op(Kind::SequenceMismatch, 2),
-        ];
+        let ops = vec![op(Kind::SequenceMatch, 3), op(Kind::SequenceMismatch, 2)];
         let spans = cigar_spans(100, &ops);
-        assert_eq!(spans, vec![
-            CigarSpan::Match { start: 100, len: 3 },
-            CigarSpan::Match { start: 103, len: 2 },
-        ]);
+        assert_eq!(
+            spans,
+            vec![
+                CigarSpan::Match { start: 100, len: 3 },
+                CigarSpan::Match { start: 103, len: 2 },
+            ]
+        );
     }
 
     #[test]

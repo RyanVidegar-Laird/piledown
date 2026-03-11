@@ -22,7 +22,15 @@ strum.workspace = true
 strum_macros.workspace = true
 tokio = { workspace = true, optional = true }
 
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+tokio = { workspace = true }
+
 [features]
 python = ["dep:pyo3"]
 cli = ["dep:clap"]
 async = ["dep:tokio", "dep:futures"]
+
+[[bench]]
+name = "coverage"
+harness = false

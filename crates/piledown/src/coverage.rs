@@ -155,7 +155,10 @@ mod tests {
     #[test]
     fn apply_spans_clips_to_region_bounds() {
         let mut map = CoverageMap::new(100, 104);
-        let spans = vec![CigarSpan::Match { start: 103, len: 10 }];
+        let spans = vec![CigarSpan::Match {
+            start: 103,
+            len: 10,
+        }];
         map.apply_spans(&spans);
         assert_eq!(map.get(103).unwrap().up, 1);
         assert_eq!(map.get(104).unwrap().up, 1);
