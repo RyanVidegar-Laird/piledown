@@ -4,6 +4,7 @@ pub mod cigar;
 pub mod strand;
 pub mod filter;
 pub mod region;
+pub mod output;
 pub mod structs;
 
 use anyhow::{anyhow, Result};
