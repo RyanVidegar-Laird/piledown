@@ -44,6 +44,7 @@ fn main() -> Result<()> {
         exclude_flags,
         lib_type: cli.lib_fragment_type,
         concurrency: cli.concurrency,
+        index_path: None,
     };
 
     let engine = PileEngine::new(config);

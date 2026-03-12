@@ -23,6 +23,9 @@ mod async_engine {
         pub lib_type: crate::types::LibFragmentType,
         /// Maximum number of regions to process concurrently via buffer_unordered.
         pub concurrency: usize,
+        /// Optional explicit path to the BAM index file (.bai).
+        /// If None, tries <bam>.bam.bai then <bam_stem>.bai.
+        pub index_path: Option<PathBuf>,
     }
 
     /// Async BAM reader wrapping noodles.
@@ -34,13 +37,37 @@ mod async_engine {
 
     impl BamSource {
         /// Open an indexed BAM file for async reading.
-        async fn open(bam_path: impl AsRef<Path>) -> Result<Self> {
+        async fn open(bam_path: impl AsRef<Path>, index_path: Option<&Path>) -> Result<Self> {
             let bam_path = bam_path.as_ref();
             let mut reader = File::open(bam_path)
                 .await
                 .map(bam::r#async::io::Reader::new)?;
             let header = reader.read_header().await?;
-            let index = bai::r#async::read(bam_path.with_extension("bam.bai")).await?;
+
+            let index = if let Some(idx_path) = index_path {
+                bai::r#async::read(idx_path).await.map_err(|e| {
+                    anyhow::anyhow!(
+                        "BAM index not found at specified path {}: {}",
+                        idx_path.display(),
+                        e
+                    )
+                })?
+            } else {
+                let bai_path1 = bam_path.with_extension("bam.bai");
+                let bai_path2 = bam_path.with_extension("bai");
+                if bai_path1.exists() {
+                    bai::r#async::read(&bai_path1).await?
+                } else if bai_path2.exists() {
+                    bai::r#async::read(&bai_path2).await?
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "BAM index not found. Tried:\n  {}\n  {}",
+                        bai_path1.display(),
+                        bai_path2.display()
+                    ));
+                }
+            };
+
             Ok(Self {
                 reader,
                 header,
@@ -62,6 +89,9 @@ mod async_engine {
                 .reader
                 .query(&self.header, &self.index, &noodle_region)?;
 
+            let mut cigar_error_count: u64 = 0;
+            let mut strand_skip_count: u64 = 0;
+
             while let Some(record) = query.try_next().await? {
                 let flags = record.flags();
                 if !filter::apply_filters(flags, filters) {
@@ -72,7 +102,18 @@ mod async_engine {
                     match classifier.classify(flags) {
                         Ok(s) if s == region.strand => {}
                         Ok(_) => continue,
-                        Err(_) => continue,
+                        Err(e) => {
+                            if strand_skip_count == 0 {
+                                log::warn!(
+                                    "strand classification failed in region {} at alignment position {:?}: {}",
+                                    region.name,
+                                    record.alignment_start(),
+                                    e
+                                );
+                            }
+                            strand_skip_count += 1;
+                            continue;
+                        }
                     }
                 }
 
@@ -81,9 +122,40 @@ mod async_engine {
                     _ => continue,
                 };
 
-                let ops: Vec<_> = record.cigar().iter().filter_map(|op| op.ok()).collect();
+                let mut ops = Vec::new();
+                for op_result in record.cigar().iter() {
+                    match op_result {
+                        Ok(op) => ops.push(op),
+                        Err(e) => {
+                            if cigar_error_count == 0 {
+                                log::warn!(
+                                    "CIGAR parse error in region {} at alignment position {}: {}",
+                                    region.name,
+                                    alignment_start,
+                                    e
+                                );
+                            }
+                            cigar_error_count += 1;
+                        }
+                    }
+                }
                 let spans = cigar_spans(alignment_start, &ops);
                 map.apply_spans(&spans);
+            }
+
+            if cigar_error_count > 0 {
+                log::warn!(
+                    "{} CIGAR operation(s) failed to parse in region {}",
+                    cigar_error_count,
+                    region.name
+                );
+            }
+            if strand_skip_count > 0 {
+                log::warn!(
+                    "{} read(s) skipped due to unclassifiable strand in region {}",
+                    strand_skip_count,
+                    region.name
+                );
             }
 
             Ok(map)
@@ -117,7 +189,8 @@ mod async_engine {
 
         /// Process a single region. Opens its own BamSource (index seeks aren't shareable).
         async fn process_one(&self, region: PileRegion) -> Result<(PileRegion, CoverageMap)> {
-            let mut source = BamSource::open(&self.config.bam_path).await?;
+            let mut source =
+                BamSource::open(&self.config.bam_path, self.config.index_path.as_deref()).await?;
             let filters = self.build_filters();
             let classifier = self.build_classifier();
             let map = source
@@ -194,6 +267,7 @@ mod tests {
             exclude_flags: None,
             lib_type: crate::types::LibFragmentType::Isr,
             concurrency: 1,
+            index_path: None,
         };
         let engine = PileEngine::new(config);
         let filters = engine.build_filters();
@@ -207,6 +281,7 @@ mod tests {
             exclude_flags: Some(Flags::UNMAPPED),
             lib_type: crate::types::LibFragmentType::Isr,
             concurrency: 1,
+            index_path: None,
         };
         let engine = PileEngine::new(config);
         let filters = engine.build_filters();
@@ -222,6 +297,7 @@ mod tests {
             exclude_flags: None,
             lib_type: crate::types::LibFragmentType::Isr,
             concurrency: 1,
+            index_path: None,
         };
         let engine = PileEngine::new(config);
         let classifier = engine.build_classifier();
@@ -240,6 +316,7 @@ mod tests {
             exclude_flags: None,
             lib_type: crate::types::LibFragmentType::Isf,
             concurrency: 1,
+            index_path: None,
         };
         let engine = PileEngine::new(config);
         let classifier = engine.build_classifier();

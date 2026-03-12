@@ -76,6 +76,7 @@ mod pyledown {
                 exclude_flags: self.exclude_flags.map(Flags::from),
                 lib_type: self.lib_fragment_type,
                 concurrency: 1,
+                index_path: None,
             };
 
             let engine = PileEngine::new(config);

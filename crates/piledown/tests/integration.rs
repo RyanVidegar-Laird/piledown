@@ -76,6 +76,7 @@ async fn single_region_isr_reverse_matches_golden() {
         exclude_flags: None,
         lib_type: LibFragmentType::Isr,
         concurrency: 1,
+        index_path: None,
     };
 
     let engine = PileEngine::new(config);
@@ -121,6 +122,7 @@ async fn single_region_isr_forward_matches_golden() {
         exclude_flags: None,
         lib_type: LibFragmentType::Isr,
         concurrency: 1,
+        index_path: None,
     };
 
     let engine = PileEngine::new(config);
@@ -161,6 +163,7 @@ async fn multi_region_returns_all_results() {
         exclude_flags: None,
         lib_type: LibFragmentType::Isr,
         concurrency: 2,
+        index_path: None,
     };
 
     let engine = PileEngine::new(config);
