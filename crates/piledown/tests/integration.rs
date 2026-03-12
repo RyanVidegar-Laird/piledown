@@ -152,7 +152,7 @@ async fn single_region_isr_forward_matches_golden() {
 }
 
 #[tokio::test]
-async fn multi_region_returns_all_results() {
+async fn multi_region_validates_against_golden() {
     let regions = vec![
         PileRegion::new("chr1".into(), 14900, 15200, "r1".into(), Strand::Reverse).unwrap(),
         PileRegion::new("chr1".into(), 17000, 17500, "r2".into(), Strand::Forward).unwrap(),
@@ -170,8 +170,104 @@ async fn multi_region_returns_all_results() {
     let results = engine.run_collect(regions).await.unwrap();
     assert_eq!(results.len(), 2);
 
-    // Both regions should have non-empty results
-    for (_, map) in &results {
-        assert!(!map.is_empty());
+    // Build lookup by region name (buffer_unordered doesn't preserve order)
+    let by_name: HashMap<&str, _> = results
+        .iter()
+        .map(|(r, m)| (r.name.as_str(), (r, m)))
+        .collect();
+
+    // Validate r1 (chr1:14900-15200, reverse) against golden
+    let (r1_region, r1_map) = by_name["r1"];
+    let r1_batch = to_record_batch(r1_region, r1_map).unwrap();
+    let r1_golden = parse_golden(&golden_dir().join("chr1_14900-15200_isr_reverse.tsv"));
+    let r1_actual = batch_to_coverage_map(&r1_batch);
+    assert_eq!(r1_golden.len(), r1_actual.len(), "r1 row count mismatch");
+    for (pos, (g_up, g_down)) in &r1_golden {
+        let (a_up, a_down) = r1_actual.get(pos).unwrap();
+        assert_eq!(
+            (a_up, a_down),
+            (g_up, g_down),
+            "r1 mismatch at pos {pos}"
+        );
     }
+
+    // Validate r2 (chr1:17000-17500, forward) against golden
+    let (r2_region, r2_map) = by_name["r2"];
+    let r2_batch = to_record_batch(r2_region, r2_map).unwrap();
+    let r2_golden = parse_golden(&golden_dir().join("chr1_17000-17500_isr_forward.tsv"));
+    let r2_actual = batch_to_coverage_map(&r2_batch);
+    assert_eq!(r2_golden.len(), r2_actual.len(), "r2 row count mismatch");
+    for (pos, (g_up, g_down)) in &r2_golden {
+        let (a_up, a_down) = r2_actual.get(pos).unwrap();
+        assert_eq!(
+            (a_up, a_down),
+            (g_up, g_down),
+            "r2 mismatch at pos {pos}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn single_region_isr_either_matches_golden() {
+    let region =
+        PileRegion::new("chr1".into(), 14900, 15200, "test".into(), Strand::Either).unwrap();
+
+    let config = EngineConfig {
+        bam_path: test_bam(),
+        exclude_flags: None,
+        lib_type: LibFragmentType::Isr,
+        concurrency: 1,
+        index_path: None,
+    };
+
+    let engine = PileEngine::new(config);
+    let results = engine.run_collect(vec![region]).await.unwrap();
+    assert_eq!(results.len(), 1);
+
+    let (region, map) = &results[0];
+    let batch = to_record_batch(region, map).unwrap();
+    assert_eq!(batch.num_rows(), 301);
+
+    let golden_path = golden_dir().join("chr1_14900-15200_isr_either.tsv");
+    assert!(golden_path.exists(), "golden fixture not found");
+
+    let golden = parse_golden(&golden_path);
+    let actual = batch_to_coverage_map(&batch);
+
+    assert_eq!(
+        golden.len(),
+        actual.len(),
+        "row count mismatch: golden={}, actual={}",
+        golden.len(),
+        actual.len()
+    );
+
+    for (pos, (g_up, g_down)) in &golden {
+        let (a_up, a_down) = actual
+            .get(pos)
+            .unwrap_or_else(|| panic!("position {pos} missing from actual output"));
+        assert_eq!(
+            (a_up, a_down),
+            (g_up, g_down),
+            "mismatch at pos {pos}: actual=({a_up},{a_down}) golden=({g_up},{g_down})"
+        );
+    }
+}
+
+#[tokio::test]
+async fn missing_bam_returns_error() {
+    let region =
+        PileRegion::new("chr1".into(), 100, 200, "test".into(), Strand::Forward).unwrap();
+
+    let config = EngineConfig {
+        bam_path: "/nonexistent/path.bam".into(),
+        exclude_flags: None,
+        lib_type: LibFragmentType::Isr,
+        concurrency: 1,
+        index_path: None,
+    };
+
+    let engine = PileEngine::new(config);
+    let result = engine.run_collect(vec![region]).await;
+    assert!(result.is_err());
 }
