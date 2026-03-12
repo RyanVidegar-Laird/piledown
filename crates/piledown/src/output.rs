@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn record_batch_has_correct_schema() {
-        let region = PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward);
+        let region = PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward).unwrap();
         let map = CoverageMap::new(100, 102);
         let batch = to_record_batch(&region, &map).unwrap();
 
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn record_batch_has_correct_row_count() {
-        let region = PileRegion::new("chr1".into(), 100, 104, "test".into(), Strand::Forward);
+        let region = PileRegion::new("chr1".into(), 100, 104, "test".into(), Strand::Forward).unwrap();
         let map = CoverageMap::new(100, 104);
         let batch = to_record_batch(&region, &map).unwrap();
         assert_eq!(batch.num_rows(), 5);
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn record_batch_reflects_coverage_values() {
-        let region = PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward);
+        let region = PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward).unwrap();
         let mut map = CoverageMap::new(100, 102);
         map.get_mut(101).unwrap().up = 42;
         map.get_mut(101).unwrap().down = 7;

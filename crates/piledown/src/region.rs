@@ -14,14 +14,21 @@ pub struct PileRegion {
 }
 
 impl PileRegion {
-    pub fn new(seq: String, start: u64, end: u64, name: String, strand: Strand) -> Self {
-        Self {
+    pub fn new(seq: String, start: u64, end: u64, name: String, strand: Strand) -> Result<Self> {
+        if start > end {
+            return Err(anyhow!(
+                "region start ({}) must be <= end ({})",
+                start,
+                end
+            ));
+        }
+        Ok(Self {
             seq,
             start,
             end,
             name,
             strand,
-        }
+        })
     }
 
     /// Parse a noodles region string (e.g. "chr1:1000-2000") into a PileRegion.
@@ -40,7 +47,7 @@ impl PileRegion {
             .end()
             .ok_or_else(|| anyhow!("region missing end"))?
             .get() as u64;
-        Ok(Self::new(seq, start, end, name, strand))
+        Self::new(seq, start, end, name, strand)
     }
 }
 
@@ -60,8 +67,17 @@ pub fn read_regions_tsv(reader: impl std::io::Read) -> Result<Vec<PileRegion>> {
         .has_headers(true)
         .from_reader(reader);
     let mut regions = Vec::new();
-    for result in csv_reader.deserialize() {
-        regions.push(result?);
+    for (i, result) in csv_reader.deserialize().enumerate() {
+        let region: PileRegion = result?;
+        if region.start > region.end {
+            return Err(anyhow!(
+                "region at row {} has start ({}) > end ({})",
+                i + 1,
+                region.start,
+                region.end
+            ));
+        }
+        regions.push(region);
     }
     Ok(regions)
 }
@@ -124,5 +140,60 @@ mod tests {
         assert_eq!(regions.len(), 2);
         assert_eq!(regions[0].name, "tes1");
         assert_eq!(regions[1].strand, Strand::Reverse);
+    }
+
+    #[test]
+    fn new_rejects_start_greater_than_end() {
+        assert!(PileRegion::new("chr1".into(), 200, 100, "test".into(), Strand::Forward).is_err());
+    }
+
+    #[test]
+    fn from_region_str_no_range() {
+        assert!(PileRegion::from_region_str("chr1", "test".into(), Strand::Forward).is_err());
+    }
+
+    #[test]
+    fn from_region_str_inverted_range() {
+        assert!(PileRegion::from_region_str("chr1:200-100", "test".into(), Strand::Forward).is_err());
+    }
+
+    #[test]
+    fn from_region_str_malformed() {
+        assert!(PileRegion::from_region_str("chr1:100", "test".into(), Strand::Forward).is_err());
+    }
+
+    #[test]
+    fn read_regions_tsv_empty_file() {
+        let tsv = "";
+        let regions = read_regions_tsv(tsv.as_bytes());
+        match regions {
+            Ok(r) => assert!(r.is_empty()),
+            Err(_) => {}
+        }
+    }
+
+    #[test]
+    fn read_regions_tsv_header_only() {
+        let tsv = "seq\tstart\tend\tname\tstrand\n";
+        let regions = read_regions_tsv(tsv.as_bytes()).unwrap();
+        assert!(regions.is_empty());
+    }
+
+    #[test]
+    fn read_regions_tsv_inverted_range() {
+        let tsv = "seq\tstart\tend\tname\tstrand\nchr1\t200\t100\ttest\t+\n";
+        assert!(read_regions_tsv(tsv.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn read_regions_tsv_missing_column() {
+        let tsv = "seq\tstart\tend\nchr1\t100\t200\n";
+        assert!(read_regions_tsv(tsv.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn read_regions_tsv_wrong_type() {
+        let tsv = "seq\tstart\tend\tname\tstrand\nchr1\tabc\t200\ttest\t+\n";
+        assert!(read_regions_tsv(tsv.as_bytes()).is_err());
     }
 }

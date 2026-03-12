@@ -69,7 +69,7 @@ fn batch_to_coverage_map(batch: &arrow::array::RecordBatch) -> HashMap<u64, (u64
 
 #[tokio::test]
 async fn single_region_isr_reverse_matches_golden() {
-    let region = PileRegion::new("chr1".into(), 14900, 15200, "test".into(), Strand::Reverse);
+    let region = PileRegion::new("chr1".into(), 14900, 15200, "test".into(), Strand::Reverse).unwrap();
 
     let config = EngineConfig {
         bam_path: test_bam(),
@@ -114,7 +114,7 @@ async fn single_region_isr_reverse_matches_golden() {
 
 #[tokio::test]
 async fn single_region_isr_forward_matches_golden() {
-    let region = PileRegion::new("chr1".into(), 17000, 17500, "test".into(), Strand::Forward);
+    let region = PileRegion::new("chr1".into(), 17000, 17500, "test".into(), Strand::Forward).unwrap();
 
     let config = EngineConfig {
         bam_path: test_bam(),
@@ -152,8 +152,8 @@ async fn single_region_isr_forward_matches_golden() {
 #[tokio::test]
 async fn multi_region_returns_all_results() {
     let regions = vec![
-        PileRegion::new("chr1".into(), 14900, 15200, "r1".into(), Strand::Reverse),
-        PileRegion::new("chr1".into(), 17000, 17500, "r2".into(), Strand::Forward),
+        PileRegion::new("chr1".into(), 14900, 15200, "r1".into(), Strand::Reverse).unwrap(),
+        PileRegion::new("chr1".into(), 17000, 17500, "r2".into(), Strand::Forward).unwrap(),
     ];
 
     let config = EngineConfig {
