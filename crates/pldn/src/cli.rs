@@ -27,13 +27,17 @@ pub struct Cli {
     #[arg(short, long, value_enum)]
     pub lib_fragment_type: LibFragmentType,
 
-    /// u16 sam/bam flags to exclude
+    /// SAM flag bits to exclude (e.g., 4=unmapped, 256=secondary, 512=failed QC, 1024=duplicate)
     #[arg(short, long)]
     pub exclude: Option<u16>,
 
     /// Output format
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Tsv)]
     pub output_format: OutputFormat,
+
+    /// Path to BAM index file (.bai). If not specified, tries <bam>.bam.bai then <stem>.bai.
+    #[arg(long)]
+    pub bam_index: Option<std::path::PathBuf>,
 
     /// Max concurrent region queries
     #[arg(long, default_value_t = 4)]

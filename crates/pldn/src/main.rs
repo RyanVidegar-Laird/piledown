@@ -18,6 +18,12 @@ fn main() -> Result<()> {
     }
     logger.init();
 
+    anyhow::ensure!(
+        cli.input.exists(),
+        "input file not found: {}",
+        cli.input.display()
+    );
+
     let exclude_flags = cli.exclude.map(Flags::from);
 
     // Build region list
@@ -44,7 +50,7 @@ fn main() -> Result<()> {
         exclude_flags,
         lib_type: cli.lib_fragment_type,
         concurrency: cli.concurrency,
-        index_path: None,
+        index_path: cli.bam_index,
     };
 
     let engine = PileEngine::new(config);
@@ -68,6 +74,9 @@ fn main() -> Result<()> {
             .iter()
             .map(|(r, m)| to_record_batch(r, m))
             .collect::<Result<Vec<_>>>()?;
+        if batches.is_empty() {
+            return Err(anyhow!("no regions produced output"));
+        }
         let combined = arrow::compute::concat_batches(&batches[0].schema(), &batches)?;
         write_output(&combined, cli.output_format, stdout, true)?;
     }
