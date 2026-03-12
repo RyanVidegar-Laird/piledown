@@ -16,11 +16,7 @@ pub struct PileRegion {
 impl PileRegion {
     pub fn new(seq: String, start: u64, end: u64, name: String, strand: Strand) -> Result<Self> {
         if start > end {
-            return Err(anyhow!(
-                "region start ({}) must be <= end ({})",
-                start,
-                end
-            ));
+            return Err(anyhow!("region start ({}) must be <= end ({})", start, end));
         }
         Ok(Self {
             seq,
@@ -154,7 +150,9 @@ mod tests {
 
     #[test]
     fn from_region_str_inverted_range() {
-        assert!(PileRegion::from_region_str("chr1:200-100", "test".into(), Strand::Forward).is_err());
+        assert!(
+            PileRegion::from_region_str("chr1:200-100", "test".into(), Strand::Forward).is_err()
+        );
     }
 
     #[test]
@@ -166,9 +164,8 @@ mod tests {
     fn read_regions_tsv_empty_file() {
         let tsv = "";
         let regions = read_regions_tsv(tsv.as_bytes());
-        match regions {
-            Ok(r) => assert!(r.is_empty()),
-            Err(_) => {}
+        if let Ok(r) = regions {
+            assert!(r.is_empty());
         }
     }
 

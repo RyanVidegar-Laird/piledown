@@ -40,7 +40,9 @@ mod pyledown {
     impl PileParams {
         #[new]
         #[pyo3(signature = (input_bam, region, strand, lib_fragment_type, exclude_flags=None, index_path=None))]
-        #[pyo3(text_signature = "(input_bam, region, strand, lib_fragment_type, exclude_flags=None, index_path=None)")]
+        #[pyo3(
+            text_signature = "(input_bam, region, strand, lib_fragment_type, exclude_flags=None, index_path=None)"
+        )]
         fn new(
             input_bam: std::path::PathBuf,
             region: String,

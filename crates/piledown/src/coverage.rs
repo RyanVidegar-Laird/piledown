@@ -20,7 +20,10 @@ pub struct CoverageMap {
 impl CoverageMap {
     /// Create a new CoverageMap covering positions `start..=end`, all zeroed.
     pub fn new(start: u64, end: u64) -> Self {
-        debug_assert!(start <= end, "CoverageMap::new called with start ({start}) > end ({end})");
+        debug_assert!(
+            start <= end,
+            "CoverageMap::new called with start ({start}) > end ({end})"
+        );
         let len = (end - start + 1) as usize;
         Self {
             start,

@@ -151,7 +151,8 @@ mod tests {
 
     #[test]
     fn record_batch_has_correct_schema() {
-        let region = PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward).unwrap();
+        let region =
+            PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward).unwrap();
         let map = CoverageMap::new(100, 102);
         let batch = to_record_batch(&region, &map).unwrap();
 
@@ -167,7 +168,8 @@ mod tests {
 
     #[test]
     fn record_batch_has_correct_row_count() {
-        let region = PileRegion::new("chr1".into(), 100, 104, "test".into(), Strand::Forward).unwrap();
+        let region =
+            PileRegion::new("chr1".into(), 100, 104, "test".into(), Strand::Forward).unwrap();
         let map = CoverageMap::new(100, 104);
         let batch = to_record_batch(&region, &map).unwrap();
         assert_eq!(batch.num_rows(), 5);
@@ -175,7 +177,8 @@ mod tests {
 
     #[test]
     fn record_batch_reflects_coverage_values() {
-        let region = PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward).unwrap();
+        let region =
+            PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward).unwrap();
         let mut map = CoverageMap::new(100, 102);
         map.get_mut(101).unwrap().up = 42;
         map.get_mut(101).unwrap().down = 7;
@@ -199,9 +202,14 @@ mod tests {
 
     #[test]
     fn tsv_round_trip() {
-        let region =
-            PileRegion::new("chr1".into(), 100, 102, "test_region".into(), Strand::Forward)
-                .unwrap();
+        let region = PileRegion::new(
+            "chr1".into(),
+            100,
+            102,
+            "test_region".into(),
+            Strand::Forward,
+        )
+        .unwrap();
         let mut map = CoverageMap::new(100, 102);
         map.get_mut(100).unwrap().up = 10;
         map.get_mut(101).unwrap().up = 20;
@@ -237,8 +245,7 @@ mod tests {
 
     #[test]
     fn tsv_header_present_when_true() {
-        let region =
-            PileRegion::new("chr1".into(), 100, 100, "t".into(), Strand::Forward).unwrap();
+        let region = PileRegion::new("chr1".into(), 100, 100, "t".into(), Strand::Forward).unwrap();
         let map = CoverageMap::new(100, 100);
         let batch = to_record_batch(&region, &map).unwrap();
 
@@ -252,8 +259,7 @@ mod tests {
 
     #[test]
     fn tsv_header_absent_when_false() {
-        let region =
-            PileRegion::new("chr1".into(), 100, 100, "t".into(), Strand::Forward).unwrap();
+        let region = PileRegion::new("chr1".into(), 100, 100, "t".into(), Strand::Forward).unwrap();
         let map = CoverageMap::new(100, 100);
         let batch = to_record_batch(&region, &map).unwrap();
 

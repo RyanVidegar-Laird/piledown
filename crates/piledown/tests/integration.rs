@@ -69,7 +69,8 @@ fn batch_to_coverage_map(batch: &arrow::array::RecordBatch) -> HashMap<u64, (u64
 
 #[tokio::test]
 async fn single_region_isr_reverse_matches_golden() {
-    let region = PileRegion::new("chr1".into(), 14900, 15200, "test".into(), Strand::Reverse).unwrap();
+    let region =
+        PileRegion::new("chr1".into(), 14900, 15200, "test".into(), Strand::Reverse).unwrap();
 
     let config = EngineConfig {
         bam_path: test_bam(),
@@ -115,7 +116,8 @@ async fn single_region_isr_reverse_matches_golden() {
 
 #[tokio::test]
 async fn single_region_isr_forward_matches_golden() {
-    let region = PileRegion::new("chr1".into(), 17000, 17500, "test".into(), Strand::Forward).unwrap();
+    let region =
+        PileRegion::new("chr1".into(), 17000, 17500, "test".into(), Strand::Forward).unwrap();
 
     let config = EngineConfig {
         bam_path: test_bam(),
@@ -184,11 +186,7 @@ async fn multi_region_validates_against_golden() {
     assert_eq!(r1_golden.len(), r1_actual.len(), "r1 row count mismatch");
     for (pos, (g_up, g_down)) in &r1_golden {
         let (a_up, a_down) = r1_actual.get(pos).unwrap();
-        assert_eq!(
-            (a_up, a_down),
-            (g_up, g_down),
-            "r1 mismatch at pos {pos}"
-        );
+        assert_eq!((a_up, a_down), (g_up, g_down), "r1 mismatch at pos {pos}");
     }
 
     // Validate r2 (chr1:17000-17500, forward) against golden
@@ -199,11 +197,7 @@ async fn multi_region_validates_against_golden() {
     assert_eq!(r2_golden.len(), r2_actual.len(), "r2 row count mismatch");
     for (pos, (g_up, g_down)) in &r2_golden {
         let (a_up, a_down) = r2_actual.get(pos).unwrap();
-        assert_eq!(
-            (a_up, a_down),
-            (g_up, g_down),
-            "r2 mismatch at pos {pos}"
-        );
+        assert_eq!((a_up, a_down), (g_up, g_down), "r2 mismatch at pos {pos}");
     }
 }
 
@@ -256,8 +250,7 @@ async fn single_region_isr_either_matches_golden() {
 
 #[tokio::test]
 async fn missing_bam_returns_error() {
-    let region =
-        PileRegion::new("chr1".into(), 100, 200, "test".into(), Strand::Forward).unwrap();
+    let region = PileRegion::new("chr1".into(), 100, 200, "test".into(), Strand::Forward).unwrap();
 
     let config = EngineConfig {
         bam_path: "/nonexistent/path.bam".into(),
