@@ -32,18 +32,22 @@ mod pyledown {
         pub lib_fragment_type: LibFragmentType,
         #[pyo3(get)]
         pub exclude_flags: Option<u16>,
+        #[pyo3(get)]
+        pub index_path: Option<std::path::PathBuf>,
     }
 
     #[pymethods]
     impl PileParams {
         #[new]
-        #[pyo3(signature = (input_bam, region, strand, lib_fragment_type, exclude_flags=None))]
+        #[pyo3(signature = (input_bam, region, strand, lib_fragment_type, exclude_flags=None, index_path=None))]
+        #[pyo3(text_signature = "(input_bam, region, strand, lib_fragment_type, exclude_flags=None, index_path=None)")]
         fn new(
             input_bam: std::path::PathBuf,
             region: String,
             strand: Strand,
             lib_fragment_type: LibFragmentType,
             exclude_flags: Option<u16>,
+            index_path: Option<std::path::PathBuf>,
         ) -> PyResult<Self> {
             Ok(Self {
                 input_bam,
@@ -51,21 +55,26 @@ mod pyledown {
                 strand,
                 lib_fragment_type,
                 exclude_flags,
+                index_path,
             })
         }
         fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
             let class_name: Bound<'_, PyString> = slf.get_type().qualname()?;
             Ok(format!(
-                "{}({:#?}, {:#?}, {:#?}, {:#?}, {:#?})",
+                "{}({:#?}, {:#?}, {:#?}, {:#?}, {:#?}, {:#?})",
                 class_name,
                 slf.borrow().input_bam,
                 slf.borrow().region,
                 slf.borrow().strand,
                 slf.borrow().lib_fragment_type,
-                slf.borrow().exclude_flags
+                slf.borrow().exclude_flags,
+                slf.borrow().index_path
             ))
         }
 
+        /// Generate per-base coverage for the configured region.
+        ///
+        /// Returns a PyArrow RecordBatch with columns: name, seq, strand, pos, up, down.
         fn generate(&self) -> PyResult<PyArrowType<RecordBatch>> {
             let pile_region =
                 PileRegion::from_region_str(&self.region, "region".into(), self.strand)
@@ -76,7 +85,7 @@ mod pyledown {
                 exclude_flags: self.exclude_flags.map(Flags::from),
                 lib_type: self.lib_fragment_type,
                 concurrency: 1,
-                index_path: None,
+                index_path: self.index_path.clone(),
             };
 
             let engine = PileEngine::new(config);
@@ -105,12 +114,14 @@ mod pyledown {
                   Query region:{:#?} \
                   Strand:{:#?} \
                   Library fragment type:{:#?} \
-                  Exclude flags:{:#?}",
+                  Exclude flags:{:#?} \
+                  Index path:{:#?}",
                 self.input_bam,
                 self.region,
                 self.strand,
                 self.lib_fragment_type,
-                self.exclude_flags
+                self.exclude_flags,
+                self.index_path
             )
         }
     }
