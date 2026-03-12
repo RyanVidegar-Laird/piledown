@@ -36,3 +36,8 @@ async = ["dep:tokio", "dep:futures"]
 [[bench]]
 name = "coverage"
 harness = false
+
+[[bench]]
+name = "pipeline"
+harness = false
+required-features = ["async"]
