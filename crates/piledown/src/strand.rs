@@ -148,4 +148,70 @@ mod tests {
         let f = flags(0x1 | 0x2 | 0x20 | 0x80);
         assert_eq!(c.classify(f).unwrap(), Strand::Reverse);
     }
+
+    // ISR edge-case tests
+
+    #[test]
+    fn isr_paired_not_proper_returns_error() {
+        let c = IsrClassifier;
+        // PAIRED only (0x1), not PROPER_PAIR
+        let f = flags(0x1 | 0x10 | 0x40);
+        assert!(c.classify(f).is_err());
+    }
+
+    #[test]
+    fn isr_both_first_and_last_matches_first_branch() {
+        let c = IsrClassifier;
+        // PAIRED | PROPER_PAIR | REVERSE | FIRST | LAST
+        let f = flags(0x1 | 0x2 | 0x10 | 0x40 | 0x80);
+        // Both first and last set — classifier matches is_first && is_reverse → Forward
+        let result = c.classify(f);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Strand::Forward);
+    }
+
+    #[test]
+    fn isr_neither_first_nor_last_returns_error() {
+        let c = IsrClassifier;
+        // PAIRED | PROPER_PAIR | REVERSE — no FIRST or LAST segment flag
+        let f = flags(0x1 | 0x2 | 0x10);
+        assert!(c.classify(f).is_err());
+    }
+
+    // ISF edge-case tests
+
+    #[test]
+    fn isf_paired_not_proper_returns_error() {
+        let c = IsfClassifier;
+        let f = flags(0x1 | 0x10 | 0x40);
+        assert!(c.classify(f).is_err());
+    }
+
+    #[test]
+    fn isf_both_first_and_last_matches_forward() {
+        let c = IsfClassifier;
+        // PAIRED | PROPER_PAIR | REVERSE | FIRST | LAST
+        let f = flags(0x1 | 0x2 | 0x10 | 0x40 | 0x80);
+        // Both first and last set — ISF: (is_last && is_reverse) matches Forward branch
+        let result = c.classify(f);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Strand::Forward);
+    }
+
+    #[test]
+    fn isf_neither_first_nor_last_returns_error() {
+        let c = IsfClassifier;
+        let f = flags(0x1 | 0x2 | 0x10);
+        assert!(c.classify(f).is_err());
+    }
+
+    #[test]
+    fn isf_both_reverse_and_mate_reverse_classifies_as_reverse() {
+        let c = IsfClassifier;
+        // PAIRED | PROPER_PAIR | REVERSE | MATE_REVERSE | FIRST
+        // Forward branch: is_first && is_mate_reverse && !is_reverse → false (!is_reverse fails)
+        // Reverse branch: is_first && is_reverse → true
+        let f = flags(0x1 | 0x2 | 0x10 | 0x20 | 0x40);
+        assert_eq!(c.classify(f).unwrap(), Strand::Reverse);
+    }
 }
