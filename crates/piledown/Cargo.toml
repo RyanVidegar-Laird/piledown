@@ -14,6 +14,7 @@ csv.workspace = true
 fnv.workspace = true
 futures = { workspace = true, optional = true }
 indexmap.workspace = true
+log.workspace = true
 noodles.workspace = true
 parquet.workspace = true
 pyo3 = {workspace = true, optional = true}
