@@ -196,4 +196,142 @@ mod tests {
             .unwrap();
         assert_eq!(down_col.value(1), 7);
     }
+
+    #[test]
+    fn tsv_round_trip() {
+        let region =
+            PileRegion::new("chr1".into(), 100, 102, "test_region".into(), Strand::Forward)
+                .unwrap();
+        let mut map = CoverageMap::new(100, 102);
+        map.get_mut(100).unwrap().up = 10;
+        map.get_mut(101).unwrap().up = 20;
+        map.get_mut(101).unwrap().down = 5;
+        map.get_mut(102).unwrap().down = 3;
+
+        let batch = to_record_batch(&region, &map).unwrap();
+
+        let mut buf = Vec::new();
+        write_output(&batch, OutputFormat::Tsv, &mut buf, true).unwrap();
+
+        let output = String::from_utf8(buf).unwrap();
+        let mut reader = csv::ReaderBuilder::new()
+            .delimiter(b'\t')
+            .from_reader(output.as_bytes());
+
+        let rows: Vec<csv::StringRecord> = reader.records().map(|r| r.unwrap()).collect();
+        assert_eq!(rows.len(), 3);
+
+        // Row 0: pos=100, up=10, down=0
+        assert_eq!(&rows[0][0], "test_region");
+        assert_eq!(&rows[0][1], "chr1");
+        assert_eq!(&rows[0][2], "+");
+        assert_eq!(&rows[0][3], "100");
+        assert_eq!(&rows[0][4], "10");
+        assert_eq!(&rows[0][5], "0");
+
+        // Row 1: pos=101, up=20, down=5
+        assert_eq!(&rows[1][3], "101");
+        assert_eq!(&rows[1][4], "20");
+        assert_eq!(&rows[1][5], "5");
+    }
+
+    #[test]
+    fn tsv_header_present_when_true() {
+        let region =
+            PileRegion::new("chr1".into(), 100, 100, "t".into(), Strand::Forward).unwrap();
+        let map = CoverageMap::new(100, 100);
+        let batch = to_record_batch(&region, &map).unwrap();
+
+        let mut buf = Vec::new();
+        write_output(&batch, OutputFormat::Tsv, &mut buf, true).unwrap();
+
+        let output = String::from_utf8(buf).unwrap();
+        let first_line = output.lines().next().unwrap();
+        assert_eq!(first_line, "name\tseq\tstrand\tpos\tup\tdown");
+    }
+
+    #[test]
+    fn tsv_header_absent_when_false() {
+        let region =
+            PileRegion::new("chr1".into(), 100, 100, "t".into(), Strand::Forward).unwrap();
+        let map = CoverageMap::new(100, 100);
+        let batch = to_record_batch(&region, &map).unwrap();
+
+        let mut buf = Vec::new();
+        write_output(&batch, OutputFormat::Tsv, &mut buf, false).unwrap();
+
+        let output = String::from_utf8(buf).unwrap();
+        let first_line = output.lines().next().unwrap();
+        // First line should be data, not header
+        assert!(first_line.starts_with("t\tchr1\t+\t100\t"));
+    }
+
+    #[test]
+    fn arrow_ipc_round_trip() {
+        let region =
+            PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Reverse).unwrap();
+        let mut map = CoverageMap::new(100, 102);
+        map.get_mut(101).unwrap().up = 42;
+        map.get_mut(101).unwrap().down = 7;
+
+        let batch = to_record_batch(&region, &map).unwrap();
+
+        let mut buf = Vec::new();
+        write_output(&batch, OutputFormat::Arrow, &mut buf, true).unwrap();
+
+        // Read back
+        let cursor = std::io::Cursor::new(buf);
+        let reader = arrow::ipc::reader::FileReader::try_new(cursor, None).unwrap();
+        let batches: Vec<_> = reader.into_iter().map(|b| b.unwrap()).collect();
+        assert_eq!(batches.len(), 1);
+
+        let read_batch = &batches[0];
+        assert_eq!(read_batch.num_rows(), 3);
+        assert_eq!(read_batch.schema().fields().len(), 6);
+
+        let up_col = read_batch
+            .column(4)
+            .as_any()
+            .downcast_ref::<arrow::array::UInt64Array>()
+            .unwrap();
+        assert_eq!(up_col.value(1), 42);
+    }
+
+    #[test]
+    fn parquet_round_trip() {
+        let region =
+            PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Either).unwrap();
+        let mut map = CoverageMap::new(100, 102);
+        map.get_mut(100).unwrap().up = 99;
+        map.get_mut(102).unwrap().down = 33;
+
+        let batch = to_record_batch(&region, &map).unwrap();
+
+        let mut buf = Vec::new();
+        write_output(&batch, OutputFormat::Parquet, &mut buf, true).unwrap();
+
+        // Read back
+        let bytes = bytes::Bytes::from(buf);
+        let reader =
+            parquet::arrow::arrow_reader::ParquetRecordBatchReader::try_new(bytes, 1024).unwrap();
+        let batches: Vec<_> = reader.into_iter().map(|b| b.unwrap()).collect();
+        assert_eq!(batches.len(), 1);
+
+        let read_batch = &batches[0];
+        assert_eq!(read_batch.num_rows(), 3);
+
+        let up_col = read_batch
+            .column(4)
+            .as_any()
+            .downcast_ref::<arrow::array::UInt64Array>()
+            .unwrap();
+        assert_eq!(up_col.value(0), 99);
+
+        let down_col = read_batch
+            .column(5)
+            .as_any()
+            .downcast_ref::<arrow::array::UInt64Array>()
+            .unwrap();
+        assert_eq!(down_col.value(2), 33);
+    }
 }
