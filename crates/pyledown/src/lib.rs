@@ -101,7 +101,7 @@ mod pyledown {
                 .next()
                 .ok_or_else(|| PyValueError::new_err("no results"))?;
             let batch =
-                to_record_batch(&region, &map).map_err(|e| PyValueError::new_err(e.to_string()))?;
+                to_record_batch(region, map).map_err(|e| PyValueError::new_err(e.to_string()))?;
 
             Ok(PyArrowType(batch))
         }

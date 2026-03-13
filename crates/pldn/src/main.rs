@@ -62,7 +62,7 @@ fn main() -> Result<()> {
         // Streaming mode for TSV
         let mut first = true;
         rt.block_on(engine.run_streaming(regions, |region, map| {
-            let batch = to_record_batch(&region, &map)?;
+            let batch = to_record_batch(region, map)?;
             write_output(&batch, cli.output_format, &stdout, first)?;
             first = false;
             Ok(())
@@ -71,7 +71,7 @@ fn main() -> Result<()> {
         // Collecting mode for Arrow/Parquet (need single batch)
         let results = rt.block_on(engine.run_collect(regions))?;
         let batches: Vec<_> = results
-            .iter()
+            .into_iter()
             .map(|(r, m)| to_record_batch(r, m))
             .collect::<Result<Vec<_>>>()?;
         if batches.is_empty() {

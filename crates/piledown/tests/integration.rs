@@ -84,7 +84,7 @@ async fn single_region_isr_reverse_matches_golden() {
     let results = engine.run_collect(vec![region]).await.unwrap();
     assert_eq!(results.len(), 1);
 
-    let (region, map) = &results[0];
+    let (region, map) = results.into_iter().next().unwrap();
     let batch = to_record_batch(region, map).unwrap();
     assert_eq!(batch.num_rows(), 301); // positions 14900..=15200
 
@@ -131,7 +131,7 @@ async fn single_region_isr_forward_matches_golden() {
     let results = engine.run_collect(vec![region]).await.unwrap();
     assert_eq!(results.len(), 1);
 
-    let (region, map) = &results[0];
+    let (region, map) = results.into_iter().next().unwrap();
     let batch = to_record_batch(region, map).unwrap();
     assert_eq!(batch.num_rows(), 501); // positions 17000..=17500
 
@@ -180,7 +180,7 @@ async fn multi_region_validates_against_golden() {
 
     // Validate r1 (chr1:14900-15200, reverse) against golden
     let (r1_region, r1_map) = by_name["r1"];
-    let r1_batch = to_record_batch(r1_region, r1_map).unwrap();
+    let r1_batch = to_record_batch(r1_region.clone(), r1_map.clone()).unwrap();
     let r1_golden = parse_golden(&golden_dir().join("chr1_14900-15200_isr_reverse.tsv"));
     let r1_actual = batch_to_coverage_map(&r1_batch);
     assert_eq!(r1_golden.len(), r1_actual.len(), "r1 row count mismatch");
@@ -191,7 +191,7 @@ async fn multi_region_validates_against_golden() {
 
     // Validate r2 (chr1:17000-17500, forward) against golden
     let (r2_region, r2_map) = by_name["r2"];
-    let r2_batch = to_record_batch(r2_region, r2_map).unwrap();
+    let r2_batch = to_record_batch(r2_region.clone(), r2_map.clone()).unwrap();
     let r2_golden = parse_golden(&golden_dir().join("chr1_17000-17500_isr_forward.tsv"));
     let r2_actual = batch_to_coverage_map(&r2_batch);
     assert_eq!(r2_golden.len(), r2_actual.len(), "r2 row count mismatch");
@@ -218,7 +218,7 @@ async fn single_region_isr_either_matches_golden() {
     let results = engine.run_collect(vec![region]).await.unwrap();
     assert_eq!(results.len(), 1);
 
-    let (region, map) = &results[0];
+    let (region, map) = results.into_iter().next().unwrap();
     let batch = to_record_batch(region, map).unwrap();
     assert_eq!(batch.num_rows(), 301);
 

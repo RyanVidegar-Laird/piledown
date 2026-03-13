@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use arrow::array::{
-    ArrayAccessor, GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Builder,
+    ArrayAccessor, GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Array,
+    UInt64Builder,
 };
 use arrow::datatypes::{DataType, Field, Int8Type, Schema};
 use parquet::arrow::ArrowWriter;
@@ -14,7 +15,7 @@ use crate::coverage::CoverageMap;
 use crate::region::PileRegion;
 use crate::types::OutputFormat;
 
-pub fn to_record_batch(region: &PileRegion, map: &CoverageMap) -> Result<RecordBatch> {
+pub fn to_record_batch(region: PileRegion, map: CoverageMap) -> Result<RecordBatch> {
     let schema = Schema::new(vec![
         Field::new("name", DataType::Utf8, false),
         Field::new("seq", DataType::Utf8, false),
@@ -29,17 +30,17 @@ pub fn to_record_batch(region: &PileRegion, map: &CoverageMap) -> Result<RecordB
     let mut seq = GenericStringBuilder::<i32>::new();
     let mut strand = StringDictionaryBuilder::<Int8Type>::with_capacity(3, n, n * 8);
     let mut pos = UInt64Builder::with_capacity(n);
-    let mut up = UInt64Builder::with_capacity(n);
-    let mut down = UInt64Builder::with_capacity(n);
 
-    for i in 0..map.len() {
+    for i in 0..n {
         name.append_value(&region.name);
         seq.append_value(&region.seq);
         strand.append_value(region.strand.as_ref());
         pos.append_value(map.start + i as u64);
-        up.append_value(map.up[i]);
-        down.append_value(map.down[i]);
     }
+
+    // up/down: zero-copy from SoA vecs
+    let up_array = UInt64Array::from(map.up);
+    let down_array = UInt64Array::from(map.down);
 
     let batch = RecordBatch::try_new(
         Arc::new(schema),
@@ -48,8 +49,8 @@ pub fn to_record_batch(region: &PileRegion, map: &CoverageMap) -> Result<RecordB
             Arc::new(seq.finish()),
             Arc::new(strand.finish()),
             Arc::new(pos.finish()),
-            Arc::new(up.finish()),
-            Arc::new(down.finish()),
+            Arc::new(up_array),
+            Arc::new(down_array),
         ],
     )?;
     Ok(batch)
@@ -154,7 +155,7 @@ mod tests {
         let region =
             PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward).unwrap();
         let map = CoverageMap::new(100, 102);
-        let batch = to_record_batch(&region, &map).unwrap();
+        let batch = to_record_batch(region, map).unwrap();
 
         let schema = batch.schema();
         assert_eq!(schema.fields().len(), 6);
@@ -171,7 +172,7 @@ mod tests {
         let region =
             PileRegion::new("chr1".into(), 100, 104, "test".into(), Strand::Forward).unwrap();
         let map = CoverageMap::new(100, 104);
-        let batch = to_record_batch(&region, &map).unwrap();
+        let batch = to_record_batch(region, map).unwrap();
         assert_eq!(batch.num_rows(), 5);
     }
 
@@ -183,7 +184,7 @@ mod tests {
         map.up[1] = 42;
         map.down[1] = 7;
 
-        let batch = to_record_batch(&region, &map).unwrap();
+        let batch = to_record_batch(region, map).unwrap();
 
         let up_col = batch
             .column(4)
@@ -216,7 +217,7 @@ mod tests {
         map.down[1] = 5;
         map.down[2] = 3;
 
-        let batch = to_record_batch(&region, &map).unwrap();
+        let batch = to_record_batch(region, map).unwrap();
 
         let mut buf = Vec::new();
         write_output(&batch, OutputFormat::Tsv, &mut buf, true).unwrap();
@@ -247,7 +248,7 @@ mod tests {
     fn tsv_header_present_when_true() {
         let region = PileRegion::new("chr1".into(), 100, 100, "t".into(), Strand::Forward).unwrap();
         let map = CoverageMap::new(100, 100);
-        let batch = to_record_batch(&region, &map).unwrap();
+        let batch = to_record_batch(region, map).unwrap();
 
         let mut buf = Vec::new();
         write_output(&batch, OutputFormat::Tsv, &mut buf, true).unwrap();
@@ -261,7 +262,7 @@ mod tests {
     fn tsv_header_absent_when_false() {
         let region = PileRegion::new("chr1".into(), 100, 100, "t".into(), Strand::Forward).unwrap();
         let map = CoverageMap::new(100, 100);
-        let batch = to_record_batch(&region, &map).unwrap();
+        let batch = to_record_batch(region, map).unwrap();
 
         let mut buf = Vec::new();
         write_output(&batch, OutputFormat::Tsv, &mut buf, false).unwrap();
@@ -280,7 +281,7 @@ mod tests {
         map.up[1] = 42;
         map.down[1] = 7;
 
-        let batch = to_record_batch(&region, &map).unwrap();
+        let batch = to_record_batch(region, map).unwrap();
 
         let mut buf = Vec::new();
         write_output(&batch, OutputFormat::Arrow, &mut buf, true).unwrap();
@@ -311,7 +312,7 @@ mod tests {
         map.up[0] = 99;
         map.down[2] = 33;
 
-        let batch = to_record_batch(&region, &map).unwrap();
+        let batch = to_record_batch(region, map).unwrap();
 
         let mut buf = Vec::new();
         write_output(&batch, OutputFormat::Parquet, &mut buf, true).unwrap();
@@ -339,5 +340,43 @@ mod tests {
             .downcast_ref::<arrow::array::UInt64Array>()
             .unwrap();
         assert_eq!(down_col.value(2), 33);
+    }
+
+    #[test]
+    fn record_batch_zero_copy_coverage_arrays() {
+        let region =
+            PileRegion::new("chr1".into(), 100, 104, "test".into(), Strand::Forward).unwrap();
+        let mut map = CoverageMap::new(100, 104);
+        map.up[0] = 10;
+        map.up[2] = 30;
+        map.down[1] = 5;
+        map.down[4] = 99;
+
+        let batch = to_record_batch(region, map).unwrap();
+        assert_eq!(batch.num_rows(), 5);
+
+        let up_col = batch
+            .column(4)
+            .as_any()
+            .downcast_ref::<arrow::array::UInt64Array>()
+            .unwrap();
+        assert_eq!(up_col.value(0), 10);
+        assert_eq!(up_col.value(2), 30);
+
+        let down_col = batch
+            .column(5)
+            .as_any()
+            .downcast_ref::<arrow::array::UInt64Array>()
+            .unwrap();
+        assert_eq!(down_col.value(1), 5);
+        assert_eq!(down_col.value(4), 99);
+
+        let pos_col = batch
+            .column(3)
+            .as_any()
+            .downcast_ref::<arrow::array::UInt64Array>()
+            .unwrap();
+        assert_eq!(pos_col.value(0), 100);
+        assert_eq!(pos_col.value(4), 104);
     }
 }
