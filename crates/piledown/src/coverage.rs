@@ -1,20 +1,18 @@
 use crate::cigar::CigarSpan;
 
-/// Per-base coverage counts.
-#[derive(Clone, Debug, Default)]
-pub struct Coverage {
-    pub up: u64,
-    pub down: u64,
-}
-
 /// Vec-backed coverage over a contiguous genomic region.
 /// Positions are 1-based, inclusive at both ends (matching BAM/noodles conventions).
 /// Indexed by `(pos - start)` for O(1) access.
+///
+/// Uses struct-of-arrays layout: separate contiguous `Vec<u64>` for `up` and `down`
+/// counts. This enables zero-copy handoff to Arrow arrays via `Buffer::from_vec()`,
+/// SIMD-friendly auto-vectorization, and cache-friendly single-field iteration.
 #[derive(Clone, Debug)]
 pub struct CoverageMap {
     pub start: u64,
     pub end: u64,
-    pub counts: Vec<Coverage>,
+    pub up: Vec<u64>,
+    pub down: Vec<u64>,
 }
 
 impl CoverageMap {
@@ -28,33 +26,18 @@ impl CoverageMap {
         Self {
             start,
             end,
-            counts: vec![Coverage::default(); len],
+            up: vec![0u64; len],
+            down: vec![0u64; len],
         }
     }
 
     /// Number of positions tracked.
     pub fn len(&self) -> usize {
-        self.counts.len()
+        self.up.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.counts.is_empty()
-    }
-
-    /// Get coverage at a genomic position. Returns None if out of range.
-    pub fn get(&self, pos: u64) -> Option<&Coverage> {
-        if pos < self.start || pos > self.end {
-            return None;
-        }
-        self.counts.get((pos - self.start) as usize)
-    }
-
-    /// Get mutable coverage at a genomic position. Returns None if out of range.
-    pub fn get_mut(&mut self, pos: u64) -> Option<&mut Coverage> {
-        if pos < self.start || pos > self.end {
-            return None;
-        }
-        self.counts.get_mut((pos - self.start) as usize)
+        self.up.is_empty()
     }
 
     /// Apply CIGAR spans to update coverage counts.
@@ -79,12 +62,9 @@ impl CoverageMap {
             let idx_start = (effective_start - self.start) as usize;
             let idx_end = (effective_end - self.start) as usize;
 
-            for cov in &mut self.counts[idx_start..idx_end] {
-                if is_up {
-                    cov.up += 1;
-                } else {
-                    cov.down += 1;
-                }
+            let arr = if is_up { &mut self.up } else { &mut self.down };
+            for val in &mut arr[idx_start..idx_end] {
+                *val += 1;
             }
         }
     }
@@ -98,40 +78,26 @@ mod tests {
     fn new_initializes_zeroed() {
         let map = CoverageMap::new(100, 105);
         assert_eq!(map.len(), 6); // 100..=105
-        for cov in map.counts.iter() {
-            assert_eq!(cov.up, 0);
-            assert_eq!(cov.down, 0);
+        for &v in map.up.iter() {
+            assert_eq!(v, 0);
+        }
+        for &v in map.down.iter() {
+            assert_eq!(v, 0);
         }
     }
 
     #[test]
-    fn get_returns_correct_position() {
+    fn direct_index_access() {
         let mut map = CoverageMap::new(100, 102);
-        map.counts[1].up = 42;
-        assert_eq!(map.get(101).unwrap().up, 42);
-    }
-
-    #[test]
-    fn get_out_of_bounds_returns_none() {
-        let map = CoverageMap::new(100, 102);
-        assert!(map.get(99).is_none());
-        assert!(map.get(103).is_none());
-    }
-
-    #[test]
-    fn get_mut_modifies_in_place() {
-        let mut map = CoverageMap::new(100, 102);
-        if let Some(cov) = map.get_mut(101) {
-            cov.up += 5;
-        }
-        assert_eq!(map.get(101).unwrap().up, 5);
+        map.up[1] = 42;
+        assert_eq!(map.up[1], 42);
     }
 
     #[test]
     fn single_position_region() {
         let map = CoverageMap::new(100, 100);
         assert_eq!(map.len(), 1);
-        assert_eq!(map.get(100).unwrap().up, 0);
+        assert_eq!(map.up[0], 0);
     }
 
     #[test]
@@ -139,11 +105,11 @@ mod tests {
         let mut map = CoverageMap::new(100, 109);
         let spans = vec![CigarSpan::Match { start: 102, len: 3 }];
         map.apply_spans(&spans);
-        assert_eq!(map.get(101).unwrap().up, 0);
-        assert_eq!(map.get(102).unwrap().up, 1);
-        assert_eq!(map.get(103).unwrap().up, 1);
-        assert_eq!(map.get(104).unwrap().up, 1);
-        assert_eq!(map.get(105).unwrap().up, 0);
+        assert_eq!(map.up[1], 0); // pos 101
+        assert_eq!(map.up[2], 1); // pos 102
+        assert_eq!(map.up[3], 1); // pos 103
+        assert_eq!(map.up[4], 1); // pos 104
+        assert_eq!(map.up[5], 0); // pos 105
     }
 
     #[test]
@@ -151,9 +117,9 @@ mod tests {
         let mut map = CoverageMap::new(100, 109);
         let spans = vec![CigarSpan::Skip { start: 103, len: 2 }];
         map.apply_spans(&spans);
-        assert_eq!(map.get(103).unwrap().down, 1);
-        assert_eq!(map.get(104).unwrap().down, 1);
-        assert_eq!(map.get(105).unwrap().down, 0);
+        assert_eq!(map.down[3], 1); // pos 103
+        assert_eq!(map.down[4], 1); // pos 104
+        assert_eq!(map.down[5], 0); // pos 105
     }
 
     #[test]
@@ -164,8 +130,8 @@ mod tests {
             len: 10,
         }];
         map.apply_spans(&spans);
-        assert_eq!(map.get(103).unwrap().up, 1);
-        assert_eq!(map.get(104).unwrap().up, 1);
+        assert_eq!(map.up[3], 1); // pos 103
+        assert_eq!(map.up[4], 1); // pos 104
     }
 
     #[test]
@@ -173,8 +139,8 @@ mod tests {
         let mut map = CoverageMap::new(100, 104);
         let spans = vec![CigarSpan::Match { start: 95, len: 3 }];
         map.apply_spans(&spans);
-        for cov in map.counts.iter() {
-            assert_eq!(cov.up, 0);
+        for &v in map.up.iter() {
+            assert_eq!(v, 0);
         }
     }
 
@@ -183,8 +149,8 @@ mod tests {
         let mut map = CoverageMap::new(100, 104);
         let spans = vec![CigarSpan::Match { start: 98, len: 5 }];
         map.apply_spans(&spans);
-        assert_eq!(map.get(100).unwrap().up, 1);
-        assert_eq!(map.get(101).unwrap().up, 1);
-        assert_eq!(map.get(102).unwrap().up, 1);
+        assert_eq!(map.up[0], 1); // pos 100
+        assert_eq!(map.up[1], 1); // pos 101
+        assert_eq!(map.up[2], 1); // pos 102
     }
 }

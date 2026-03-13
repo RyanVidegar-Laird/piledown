@@ -32,13 +32,13 @@ pub fn to_record_batch(region: &PileRegion, map: &CoverageMap) -> Result<RecordB
     let mut up = UInt64Builder::with_capacity(n);
     let mut down = UInt64Builder::with_capacity(n);
 
-    for (i, cov) in map.counts.iter().enumerate() {
+    for i in 0..map.len() {
         name.append_value(&region.name);
         seq.append_value(&region.seq);
         strand.append_value(region.strand.as_ref());
         pos.append_value(map.start + i as u64);
-        up.append_value(cov.up);
-        down.append_value(cov.down);
+        up.append_value(map.up[i]);
+        down.append_value(map.down[i]);
     }
 
     let batch = RecordBatch::try_new(
@@ -180,8 +180,8 @@ mod tests {
         let region =
             PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward).unwrap();
         let mut map = CoverageMap::new(100, 102);
-        map.get_mut(101).unwrap().up = 42;
-        map.get_mut(101).unwrap().down = 7;
+        map.up[1] = 42;
+        map.down[1] = 7;
 
         let batch = to_record_batch(&region, &map).unwrap();
 
@@ -211,10 +211,10 @@ mod tests {
         )
         .unwrap();
         let mut map = CoverageMap::new(100, 102);
-        map.get_mut(100).unwrap().up = 10;
-        map.get_mut(101).unwrap().up = 20;
-        map.get_mut(101).unwrap().down = 5;
-        map.get_mut(102).unwrap().down = 3;
+        map.up[0] = 10;
+        map.up[1] = 20;
+        map.down[1] = 5;
+        map.down[2] = 3;
 
         let batch = to_record_batch(&region, &map).unwrap();
 
@@ -277,8 +277,8 @@ mod tests {
         let region =
             PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Reverse).unwrap();
         let mut map = CoverageMap::new(100, 102);
-        map.get_mut(101).unwrap().up = 42;
-        map.get_mut(101).unwrap().down = 7;
+        map.up[1] = 42;
+        map.down[1] = 7;
 
         let batch = to_record_batch(&region, &map).unwrap();
 
@@ -308,8 +308,8 @@ mod tests {
         let region =
             PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Either).unwrap();
         let mut map = CoverageMap::new(100, 102);
-        map.get_mut(100).unwrap().up = 99;
-        map.get_mut(102).unwrap().down = 33;
+        map.up[0] = 99;
+        map.down[2] = 33;
 
         let batch = to_record_batch(&region, &map).unwrap();
 
