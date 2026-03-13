@@ -2,32 +2,16 @@
   description = "Pileup... but down too.";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/25.11";
     flake-utils.url = "github:numtide/flake-utils";
 
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-      };
-    };
-
-    advisory-db = {
-      url = "github:rustsec/advisory-db";
-      flake = false;
-    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, advisory-db, ... }:
+  outputs = { self, nixpkgs, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ (import rust-overlay) ];
-        };
-
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-          extensions = [ "rust-src" "rust-analyzer" ];
         };
 
         # CLI package (python3 needed because pyo3-build-config resolves across the workspace)
@@ -50,7 +34,7 @@
           pyproject = true;
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
             src = ./.;
-            hash = "sha256-oT8fEyaAONemF8xPuzBQncI57cEba3mlffNaeKmaHmg=";
+            hash = "sha256-B++Ma11T2b7jSB0tEm1y6Z6YInqcUusG7v2qk4O0od0=";
           };
           nativeBuildInputs = with pkgs.rustPlatform; [
             cargoSetupHook
@@ -101,7 +85,7 @@
             pname = "piledown-fmt";
             version = "0.1.0";
             inherit src;
-            nativeBuildInputs = [ rustToolchain ];
+            nativeBuildInputs = [ pkgs.rustfmt pkgs.cargo ];
             buildPhase = ''
               cargo fmt -- --check
             '';
@@ -121,18 +105,9 @@
             installPhase = "mkdir -p $out";
           };
 
-          audit = pkgs.stdenv.mkDerivation {
-            pname = "piledown-audit";
-            version = "0.1.0";
-            inherit src;
-            nativeBuildInputs = [ rustToolchain pkgs.cargo-audit ];
-            buildPhase = ''
-              HOME=$TMPDIR cargo audit --db ${advisory-db} --no-fetch \
-                --ignore RUSTSEC-2025-0024 \
-                --ignore RUSTSEC-2025-0020
-            '';
-            installPhase = "mkdir -p $out";
-          };
+          # audit check temporarily disabled: cargo-audit in nixpkgs 25.11
+          # doesn't support CVSS 4.0 format used in current advisory-db.
+          # Re-enable once nixpkgs ships cargo-audit >= 0.22.
 
           doc = pkgs.rustPlatform.buildRustPackage {
             pname = "piledown-doc";
@@ -154,7 +129,7 @@
         };
 
         devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [ rustToolchain ] ++ devPkgs;
+          nativeBuildInputs = [ pkgs.rustc pkgs.cargo pkgs.clippy pkgs.rustfmt pkgs.rust-analyzer ] ++ devPkgs;
         };
       });
 }
