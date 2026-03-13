@@ -23,7 +23,7 @@ mod pyledown {
     use piledown::region::PileRegion;
 
     #[derive(Debug, Clone)]
-    #[pyclass(str)]
+    #[pyclass(str, from_py_object)]
     pub struct PileParams {
         #[pyo3(get)]
         pub input_bam: std::path::PathBuf,
@@ -107,7 +107,7 @@ mod pyledown {
         /// name, seq, strand, pos, up, down.
         fn generate(
             &self,
-            py: Python<'_>,
+            _py: Python<'_>,
         ) -> PyResult<PyArrowType<Box<dyn RecordBatchReader + Send>>> {
             let pile_regions = self.build_regions()?;
 
@@ -123,17 +123,15 @@ mod pyledown {
             let engine = PileEngine::new(config);
             let rt = runtime();
 
-            let results: Vec<(PileRegion, CoverageMap)> = py
-                .allow_threads(|| {
-                    rt.block_on(async {
-                        let stream = engine.run(pile_regions);
-                        let pinned = std::pin::pin!(stream);
-                        pinned
-                            .collect::<Vec<_>>()
-                            .await
-                            .into_iter()
-                            .collect::<Result<Vec<_>, _>>()
-                    })
+            let results: Vec<(PileRegion, CoverageMap)> = rt
+                .block_on(async {
+                    let stream = engine.run(pile_regions);
+                    let pinned = std::pin::pin!(stream);
+                    pinned
+                        .collect::<Vec<_>>()
+                        .await
+                        .into_iter()
+                        .collect::<Result<Vec<_>, _>>()
                 })
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
 

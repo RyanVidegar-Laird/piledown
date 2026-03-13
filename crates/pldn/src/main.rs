@@ -78,7 +78,7 @@ fn main() -> Result<()> {
                     .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
                     .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
                     .set_compression(Compression::SNAPPY)
-                    .set_max_row_group_size(cli.row_group_size)
+                    .set_max_row_group_row_count(Some(cli.row_group_size))
                     .build();
                 let stdout = tokio::io::stdout();
                 write_stream_as_parquet(stream, stdout, Some(props)).await

@@ -9,7 +9,7 @@ use clap::ValueEnum;
 
 /// Library preparation protocol type.
 /// See [Salmon docs](https://salmon.readthedocs.io/en/latest/library_type.html)
-#[cfg_attr(feature = "python", pyclass(eq, eq_int))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, from_py_object))]
 #[cfg_attr(feature = "cli", derive(ValueEnum))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LibFragmentType {
@@ -18,7 +18,7 @@ pub enum LibFragmentType {
 }
 
 /// Strand of the original transcript.
-#[cfg_attr(feature = "python", pyclass(eq, eq_int))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, from_py_object))]
 #[cfg_attr(feature = "cli", derive(ValueEnum))]
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString, Serialize, Deserialize,

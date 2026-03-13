@@ -16,7 +16,7 @@ pub struct PileRegion {
 impl PileRegion {
     pub fn new(seq: String, start: u64, end: u64, name: String, strand: Strand) -> Result<Self> {
         if start > end {
-            return Err(anyhow!("region start ({}) must be <= end ({})", start, end));
+            return Err(anyhow!("region start ({start}) must be <= end ({end})"));
         }
         Ok(Self {
             seq,
@@ -33,7 +33,7 @@ impl PileRegion {
             .parse()
             .map_err(|e: noodles::core::region::ParseError| anyhow!(e))?;
         let seq = String::from_utf8(parsed.name().to_vec())
-            .map_err(|e| anyhow!("non-UTF8 sequence name: {}", e))?;
+            .map_err(|e| anyhow!("non-UTF8 sequence name: {e}"))?;
         let interval = parsed.interval();
         let start = interval
             .start()

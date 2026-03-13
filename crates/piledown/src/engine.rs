@@ -33,7 +33,7 @@ mod async_engine {
 
     /// Async BAM reader wrapping noodles.
     struct BamSource {
-        reader: bam::r#async::io::Reader<noodles::bgzf::r#async::Reader<File>>,
+        reader: bam::r#async::io::Reader<noodles::bgzf::r#async::io::Reader<File>>,
         header: sam::Header,
         index: bai::Index,
     }
@@ -48,7 +48,7 @@ mod async_engine {
             let header = reader.read_header().await?;
 
             let index = if let Some(idx_path) = index_path {
-                bai::r#async::read(idx_path).await.map_err(|e| {
+                bai::r#async::fs::read(idx_path).await.map_err(|e| {
                     anyhow::anyhow!(
                         "BAM index not found at specified path {}: {}",
                         idx_path.display(),
@@ -59,9 +59,9 @@ mod async_engine {
                 let bai_path1 = bam_path.with_extension("bam.bai");
                 let bai_path2 = bam_path.with_extension("bai");
                 if bai_path1.exists() {
-                    bai::r#async::read(&bai_path1).await?
+                    bai::r#async::fs::read(&bai_path1).await?
                 } else if bai_path2.exists() {
-                    bai::r#async::read(&bai_path2).await?
+                    bai::r#async::fs::read(&bai_path2).await?
                 } else {
                     return Err(anyhow::anyhow!(
                         "BAM index not found. Tried:\n  {}\n  {}",
@@ -88,14 +88,15 @@ mod async_engine {
             let mut map = CoverageMap::new(region.start, region.end);
             let noodle_region: noodles::core::Region = region.clone().try_into()?;
 
-            let mut query = self
+            let query = self
                 .reader
                 .query(&self.header, &self.index, &noodle_region)?;
 
             let mut cigar_error_count: u64 = 0;
             let mut strand_skip_count: u64 = 0;
 
-            while let Some(record) = query.try_next().await? {
+            let mut records = std::pin::pin!(query.records());
+            while let Some(record) = records.try_next().await? {
                 let flags = record.flags();
                 if !filter::apply_filters(flags, filters) {
                     continue;

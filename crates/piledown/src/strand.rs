@@ -33,7 +33,7 @@ impl StrandClassifier for IsrClassifier {
         } else if (is_first && is_mate_reverse) || (is_last && is_reverse) {
             Ok(Strand::Reverse)
         } else {
-            Err(anyhow!("unexpected flag combination: {:?}", flags))
+            Err(anyhow!("unexpected flag combination: {flags:?}"))
         }
     }
 }
@@ -59,7 +59,7 @@ impl StrandClassifier for IsfClassifier {
         } else if (is_first && is_reverse) || (is_last && is_mate_reverse && !is_reverse) {
             Ok(Strand::Reverse)
         } else {
-            Err(anyhow!("unexpected flag combination: {:?}", flags))
+            Err(anyhow!("unexpected flag combination: {flags:?}"))
         }
     }
 }
