@@ -21,11 +21,14 @@ mod async_engine {
         pub bam_path: PathBuf,
         pub exclude_flags: Option<noodles::sam::alignment::record::Flags>,
         pub lib_type: crate::types::LibFragmentType,
-        /// Maximum number of regions to process concurrently via buffer_unordered.
+        /// Maximum number of regions to process concurrently via buffered.
         pub concurrency: usize,
         /// Optional explicit path to the BAM index file (.bai).
         /// If None, tries <bam>.bam.bai then <bam_stem>.bai.
         pub index_path: Option<PathBuf>,
+        /// Optional chunk size: if set, regions larger than this many positions
+        /// are split into multiple (PileRegion, CoverageMap) pairs in the output stream.
+        pub chunk_size: Option<usize>,
     }
 
     /// Async BAM reader wrapping noodles.
@@ -199,39 +202,81 @@ mod async_engine {
             Ok((region, map))
         }
 
-        /// Collect results for all regions into memory.
-        pub async fn run_collect(
+        /// Return a stream of (PileRegion, CoverageMap) results, one per region
+        /// (or more if chunk_size splits a large region). Uses `buffered()` to
+        /// preserve input order.
+        pub fn run(
             &self,
             regions: Vec<PileRegion>,
-        ) -> Result<Vec<(PileRegion, CoverageMap)>> {
+        ) -> impl futures::Stream<Item = Result<(PileRegion, CoverageMap)>> + '_ {
             use futures::stream::{self, StreamExt};
 
-            let results: Vec<Result<_>> = stream::iter(regions)
+            let chunk_size = self.config.chunk_size;
+
+            stream::iter(regions)
                 .map(|region| self.process_one(region))
-                .buffer_unordered(self.config.concurrency)
-                .collect()
-                .await;
-
-            results.into_iter().collect()
+                .buffered(self.config.concurrency)
+                .flat_map(move |result| match result {
+                    Err(e) => Box::pin(stream::once(async { Err(e) }))
+                        as std::pin::Pin<Box<dyn futures::Stream<Item = Result<_>> + Send>>,
+                    Ok((region, map)) => {
+                        if let Some(cs) = chunk_size {
+                            if map.len() > cs {
+                                let chunks = chunk_coverage(region, map, cs);
+                                return Box::pin(stream::iter(chunks.into_iter().map(Ok)))
+                                    as std::pin::Pin<
+                                        Box<dyn futures::Stream<Item = Result<_>> + Send>,
+                                    >;
+                            }
+                        }
+                        Box::pin(stream::once(async { Ok((region, map)) }))
+                            as std::pin::Pin<Box<dyn futures::Stream<Item = Result<_>> + Send>>
+                    }
+                })
         }
+    }
 
-        /// Stream results, calling sink for each completed region.
-        pub async fn run_streaming<F>(&self, regions: Vec<PileRegion>, mut sink: F) -> Result<()>
-        where
-            F: FnMut(PileRegion, CoverageMap) -> Result<()>,
-        {
-            use futures::stream::{self, StreamExt};
+    /// Split a (PileRegion, CoverageMap) into chunks of at most `chunk_size` positions.
+    pub(crate) fn chunk_coverage(
+        region: PileRegion,
+        map: CoverageMap,
+        chunk_size: usize,
+    ) -> Vec<(PileRegion, CoverageMap)> {
+        let total = map.len();
+        let mut chunks = Vec::new();
+        let mut offset = 0;
+        let mut up_remaining = map.up;
+        let mut down_remaining = map.down;
 
-            let mut stream = stream::iter(regions)
-                .map(|region| self.process_one(region))
-                .buffer_unordered(self.config.concurrency);
+        while offset < total {
+            let this_chunk = chunk_size.min(total - offset);
+            let chunk_start = map.start + offset as u64;
+            let chunk_end = chunk_start + this_chunk as u64 - 1;
 
-            while let Some(result) = stream.next().await {
-                let (region, map) = result?;
-                sink(region, map)?;
-            }
-            Ok(())
+            let up_rest = up_remaining.split_off(this_chunk);
+            let down_rest = down_remaining.split_off(this_chunk);
+
+            let chunk_map = CoverageMap {
+                start: chunk_start,
+                end: chunk_end,
+                up: up_remaining,
+                down: down_remaining,
+            };
+
+            let chunk_region = PileRegion {
+                seq: region.seq.clone(),
+                start: chunk_start,
+                end: chunk_end,
+                name: region.name.clone(),
+                strand: region.strand,
+            };
+
+            chunks.push((chunk_region, chunk_map));
+            up_remaining = up_rest;
+            down_remaining = down_rest;
+            offset += this_chunk;
         }
+        chunks
     }
 }
 
@@ -268,6 +313,7 @@ mod tests {
             lib_type: crate::types::LibFragmentType::Isr,
             concurrency: 1,
             index_path: None,
+            chunk_size: None,
         };
         let engine = PileEngine::new(config);
         let filters = engine.build_filters();
@@ -282,6 +328,7 @@ mod tests {
             lib_type: crate::types::LibFragmentType::Isr,
             concurrency: 1,
             index_path: None,
+            chunk_size: None,
         };
         let engine = PileEngine::new(config);
         let filters = engine.build_filters();
@@ -298,6 +345,7 @@ mod tests {
             lib_type: crate::types::LibFragmentType::Isr,
             concurrency: 1,
             index_path: None,
+            chunk_size: None,
         };
         let engine = PileEngine::new(config);
         let classifier = engine.build_classifier();
@@ -317,6 +365,7 @@ mod tests {
             lib_type: crate::types::LibFragmentType::Isf,
             concurrency: 1,
             index_path: None,
+            chunk_size: None,
         };
         let engine = PileEngine::new(config);
         let classifier = engine.build_classifier();
@@ -326,5 +375,61 @@ mod tests {
             classifier.classify(f).unwrap(),
             crate::types::Strand::Reverse
         );
+    }
+
+    #[test]
+    fn chunk_coverage_splits_correctly() {
+        use crate::coverage::CoverageMap;
+        let region = crate::region::PileRegion::new(
+            "chr1".into(),
+            100,
+            109,
+            "test".into(),
+            crate::types::Strand::Forward,
+        )
+        .unwrap();
+        let mut map = CoverageMap::new(100, 109);
+        map.up[0] = 1; // pos 100
+        map.up[5] = 5; // pos 105
+        map.up[9] = 9; // pos 109
+
+        let chunks = chunk_coverage(region, map, 4);
+
+        assert_eq!(chunks.len(), 3); // 10 positions / 4 = 3 chunks (4, 4, 2)
+
+        // Chunk 0: positions 100-103
+        assert_eq!(chunks[0].0.start, 100);
+        assert_eq!(chunks[0].0.end, 103);
+        assert_eq!(chunks[0].1.len(), 4);
+        assert_eq!(chunks[0].1.up[0], 1);
+
+        // Chunk 1: positions 104-107
+        assert_eq!(chunks[1].0.start, 104);
+        assert_eq!(chunks[1].0.end, 107);
+        assert_eq!(chunks[1].1.len(), 4);
+        assert_eq!(chunks[1].1.up[1], 5); // pos 105, offset 1 within chunk
+
+        // Chunk 2: positions 108-109
+        assert_eq!(chunks[2].0.start, 108);
+        assert_eq!(chunks[2].0.end, 109);
+        assert_eq!(chunks[2].1.len(), 2);
+        assert_eq!(chunks[2].1.up[1], 9); // pos 109, offset 1 within chunk
+    }
+
+    #[tokio::test]
+    async fn run_stream_yields_results() {
+        use futures::stream::StreamExt;
+
+        let config = EngineConfig {
+            bam_path: "dummy.bam".into(),
+            exclude_flags: None,
+            lib_type: crate::types::LibFragmentType::Isr,
+            concurrency: 1,
+            index_path: None,
+            chunk_size: None,
+        };
+        let engine = PileEngine::new(config);
+        let mut stream = std::pin::pin!(engine.run(vec![]));
+        assert!(stream.next().await.is_none());
     }
 }

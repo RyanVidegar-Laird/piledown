@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use futures::stream::StreamExt;
 use piledown::engine::{EngineConfig, PileEngine};
 use piledown::output::to_record_batch;
 use piledown::region::PileRegion;
@@ -78,13 +79,13 @@ async fn single_region_isr_reverse_matches_golden() {
         lib_type: LibFragmentType::Isr,
         concurrency: 1,
         index_path: None,
+        chunk_size: None,
     };
 
     let engine = PileEngine::new(config);
-    let results = engine.run_collect(vec![region]).await.unwrap();
-    assert_eq!(results.len(), 1);
+    let mut stream = std::pin::pin!(engine.run(vec![region]));
+    let (region, map) = stream.next().await.unwrap().unwrap();
 
-    let (region, map) = results.into_iter().next().unwrap();
     let batch = to_record_batch(region, map).unwrap();
     assert_eq!(batch.num_rows(), 301); // positions 14900..=15200
 
@@ -125,13 +126,13 @@ async fn single_region_isr_forward_matches_golden() {
         lib_type: LibFragmentType::Isr,
         concurrency: 1,
         index_path: None,
+        chunk_size: None,
     };
 
     let engine = PileEngine::new(config);
-    let results = engine.run_collect(vec![region]).await.unwrap();
-    assert_eq!(results.len(), 1);
+    let mut stream = std::pin::pin!(engine.run(vec![region]));
+    let (region, map) = stream.next().await.unwrap().unwrap();
 
-    let (region, map) = results.into_iter().next().unwrap();
     let batch = to_record_batch(region, map).unwrap();
     assert_eq!(batch.num_rows(), 501); // positions 17000..=17500
 
@@ -166,13 +167,22 @@ async fn multi_region_validates_against_golden() {
         lib_type: LibFragmentType::Isr,
         concurrency: 2,
         index_path: None,
+        chunk_size: None,
     };
 
     let engine = PileEngine::new(config);
-    let results = engine.run_collect(regions).await.unwrap();
+    let results: Vec<(PileRegion, piledown::coverage::CoverageMap)> = {
+        let stream = std::pin::pin!(engine.run(regions));
+        stream
+            .collect::<Vec<anyhow::Result<_>>>()
+            .await
+            .into_iter()
+            .collect::<anyhow::Result<Vec<_>>>()
+            .unwrap()
+    };
     assert_eq!(results.len(), 2);
 
-    // Build lookup by region name (buffer_unordered doesn't preserve order)
+    // Build lookup by region name (still needed since we validate by name)
     let by_name: HashMap<&str, _> = results
         .iter()
         .map(|(r, m)| (r.name.as_str(), (r, m)))
@@ -212,13 +222,13 @@ async fn single_region_isr_either_matches_golden() {
         lib_type: LibFragmentType::Isr,
         concurrency: 1,
         index_path: None,
+        chunk_size: None,
     };
 
     let engine = PileEngine::new(config);
-    let results = engine.run_collect(vec![region]).await.unwrap();
-    assert_eq!(results.len(), 1);
+    let mut stream = std::pin::pin!(engine.run(vec![region]));
+    let (region, map) = stream.next().await.unwrap().unwrap();
 
-    let (region, map) = results.into_iter().next().unwrap();
     let batch = to_record_batch(region, map).unwrap();
     assert_eq!(batch.num_rows(), 301);
 
@@ -258,9 +268,11 @@ async fn missing_bam_returns_error() {
         lib_type: LibFragmentType::Isr,
         concurrency: 1,
         index_path: None,
+        chunk_size: None,
     };
 
     let engine = PileEngine::new(config);
-    let result = engine.run_collect(vec![region]).await;
+    let mut stream = std::pin::pin!(engine.run(vec![region]));
+    let result = stream.next().await.unwrap();
     assert!(result.is_err());
 }

@@ -88,18 +88,18 @@ mod pyledown {
                 lib_type: self.lib_fragment_type,
                 concurrency: 1,
                 index_path: self.index_path.clone(),
+                chunk_size: None,
             };
 
             let engine = PileEngine::new(config);
             let rt = runtime();
-            let results = rt
-                .block_on(engine.run_collect(vec![pile_region]))
+            let (region, map) = rt
+                .block_on(async {
+                    use futures::stream::StreamExt;
+                    let mut stream = std::pin::pin!(engine.run(vec![pile_region]));
+                    stream.next().await.unwrap()
+                })
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-
-            let (region, map) = results
-                .into_iter()
-                .next()
-                .ok_or_else(|| PyValueError::new_err("no results"))?;
             let batch =
                 to_record_batch(region, map).map_err(|e| PyValueError::new_err(e.to_string()))?;
 

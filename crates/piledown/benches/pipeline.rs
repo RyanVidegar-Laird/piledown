@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use futures::stream::StreamExt;
 use piledown::engine::{runtime, EngineConfig, PileEngine};
 use piledown::region::PileRegion;
 use piledown::types::{LibFragmentType, Strand};
@@ -21,10 +22,18 @@ fn bench_full_pipeline(c: &mut Criterion) {
                 lib_type: LibFragmentType::Isr,
                 concurrency: 1,
                 index_path: None,
+                chunk_size: None,
             };
             let engine = PileEngine::new(config);
-            rt.block_on(engine.run_collect(vec![region.clone()]))
-                .unwrap();
+            rt.block_on(async {
+                let stream = std::pin::pin!(engine.run(vec![region.clone()]));
+                stream
+                    .collect::<Vec<_>>()
+                    .await
+                    .into_iter()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap()
+            });
         });
     });
 }

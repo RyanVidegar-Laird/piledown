@@ -1618,6 +1618,7 @@ dependencies = [
  "clap",
  "clap-verbosity-flag",
  "env_logger",
+ "futures",
  "log",
  "noodles",
  "piledown",
@@ -1682,6 +1683,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arrow",
+ "futures",
  "noodles",
  "piledown",
  "pyo3",

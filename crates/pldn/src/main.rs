@@ -51,6 +51,7 @@ fn main() -> Result<()> {
         lib_type: cli.lib_fragment_type,
         concurrency: cli.concurrency,
         index_path: cli.bam_index,
+        chunk_size: None,
     };
 
     let engine = PileEngine::new(config);
@@ -58,18 +59,23 @@ fn main() -> Result<()> {
 
     let stdout = std::io::stdout();
 
+    // Collect all results from the stream, then output
+    let results: Vec<_> = rt.block_on(async {
+        use futures::stream::StreamExt;
+        let stream = std::pin::pin!(engine.run(regions));
+        stream
+            .collect::<Vec<Result<_>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>>>()
+    })?;
+
     if cli.output_format == piledown::types::OutputFormat::Tsv {
-        // Streaming mode for TSV
-        let mut first = true;
-        rt.block_on(engine.run_streaming(regions, |region, map| {
+        for (i, (region, map)) in results.into_iter().enumerate() {
             let batch = to_record_batch(region, map)?;
-            write_output(&batch, cli.output_format, &stdout, first)?;
-            first = false;
-            Ok(())
-        }))?;
+            write_output(&batch, cli.output_format, &stdout, i == 0)?;
+        }
     } else {
-        // Collecting mode for Arrow/Parquet (need single batch)
-        let results = rt.block_on(engine.run_collect(regions))?;
         let batches: Vec<_> = results
             .into_iter()
             .map(|(r, m)| to_record_batch(r, m))

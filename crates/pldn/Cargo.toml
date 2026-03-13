@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 piledown = {path = "../piledown", features = [ "cli", "async" ]}
 anyhow.workspace = true
+futures.workspace = true
 arrow.workspace = true
 clap.workspace = true
 clap-verbosity-flag.workspace = true

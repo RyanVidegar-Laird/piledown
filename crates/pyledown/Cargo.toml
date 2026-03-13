@@ -8,4 +8,5 @@ arrow.workspace = true
 piledown = {workspace = true, features = ["python", "async"]}
 noodles.workspace = true
 anyhow.workspace = true
+futures.workspace = true
 pyo3.workspace = true
