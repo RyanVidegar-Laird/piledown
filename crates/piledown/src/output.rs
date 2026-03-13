@@ -1,19 +1,16 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use arrow::array::{
-    ArrayAccessor, GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Array,
-    UInt64Builder,
+    GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Array, UInt64Builder,
 };
 use arrow::datatypes::{DataType, Field, Int8Type, Schema};
-use parquet::arrow::ArrowWriter;
 use parquet::basic::Encoding;
 use parquet::file::properties::WriterProperties;
 use parquet::schema::types::ColumnPath;
 
 use crate::coverage::CoverageMap;
 use crate::region::PileRegion;
-use crate::types::OutputFormat;
 
 pub fn to_record_batch(region: PileRegion, map: CoverageMap) -> Result<RecordBatch> {
     let schema = Schema::new(vec![
@@ -54,93 +51,6 @@ pub fn to_record_batch(region: PileRegion, map: CoverageMap) -> Result<RecordBat
         ],
     )?;
     Ok(batch)
-}
-
-/// Write a RecordBatch to the given writer in the specified format.
-/// `write_header` controls whether TSV output includes a header row.
-/// Set to `true` for the first batch, `false` for subsequent batches in streaming mode.
-/// Ignored for Arrow/Parquet formats.
-pub fn write_output(
-    batch: &RecordBatch,
-    format: OutputFormat,
-    writer: impl std::io::Write + Send,
-    write_header: bool,
-) -> Result<()> {
-    match format {
-        OutputFormat::Tsv => {
-            let mut w = csv::WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(writer);
-            if write_header {
-                w.write_record(["name", "seq", "strand", "pos", "up", "down"])?;
-            }
-
-            let name_col = batch
-                .column(0)
-                .as_any()
-                .downcast_ref::<arrow::array::StringArray>()
-                .ok_or_else(|| anyhow!("expected StringArray for 'name' column"))?;
-            let seq_col = batch
-                .column(1)
-                .as_any()
-                .downcast_ref::<arrow::array::StringArray>()
-                .ok_or_else(|| anyhow!("expected StringArray for 'seq' column"))?;
-            let strand_arr = batch
-                .column(2)
-                .as_any()
-                .downcast_ref::<arrow::array::DictionaryArray<Int8Type>>()
-                .ok_or_else(|| anyhow!("expected DictionaryArray for 'strand' column"))?;
-            let strand_col = strand_arr
-                .downcast_dict::<arrow::array::StringArray>()
-                .ok_or_else(|| anyhow!("expected StringArray values in 'strand' dictionary"))?;
-            let pos_col = batch
-                .column(3)
-                .as_any()
-                .downcast_ref::<arrow::array::UInt64Array>()
-                .ok_or_else(|| anyhow!("expected UInt64Array for 'pos' column"))?;
-            let up_col = batch
-                .column(4)
-                .as_any()
-                .downcast_ref::<arrow::array::UInt64Array>()
-                .ok_or_else(|| anyhow!("expected UInt64Array for 'up' column"))?;
-            let down_col = batch
-                .column(5)
-                .as_any()
-                .downcast_ref::<arrow::array::UInt64Array>()
-                .ok_or_else(|| anyhow!("expected UInt64Array for 'down' column"))?;
-
-            for i in 0..batch.num_rows() {
-                w.serialize((
-                    name_col.value(i),
-                    seq_col.value(i),
-                    strand_col.value(i),
-                    pos_col.value(i),
-                    up_col.value(i),
-                    down_col.value(i),
-                ))?;
-            }
-            w.flush()?;
-        }
-        OutputFormat::Arrow => {
-            let mut w = arrow::ipc::writer::FileWriter::try_new_buffered(writer, &batch.schema())?;
-            w.write(batch)?;
-            w.flush()?;
-            w.finish()?;
-        }
-        OutputFormat::Parquet => {
-            let props = WriterProperties::builder()
-                .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
-                .set_column_encoding(ColumnPath::from("pos"), Encoding::DELTA_BINARY_PACKED)
-                .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
-                .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
-                .set_compression(parquet::basic::Compression::SNAPPY)
-                .build();
-            let mut w = ArrowWriter::try_new(writer, batch.schema(), Some(props))?;
-            w.write(batch)?;
-            w.close()?;
-        }
-    }
-    Ok(())
 }
 
 #[cfg(feature = "async")]
@@ -308,78 +218,6 @@ mod tests {
     }
 
     #[test]
-    fn tsv_round_trip() {
-        let region = PileRegion::new(
-            "chr1".into(),
-            100,
-            102,
-            "test_region".into(),
-            Strand::Forward,
-        )
-        .unwrap();
-        let mut map = CoverageMap::new(100, 102);
-        map.up[0] = 10;
-        map.up[1] = 20;
-        map.down[1] = 5;
-        map.down[2] = 3;
-
-        let batch = to_record_batch(region, map).unwrap();
-
-        let mut buf = Vec::new();
-        write_output(&batch, OutputFormat::Tsv, &mut buf, true).unwrap();
-
-        let output = String::from_utf8(buf).unwrap();
-        let mut reader = csv::ReaderBuilder::new()
-            .delimiter(b'\t')
-            .from_reader(output.as_bytes());
-
-        let rows: Vec<csv::StringRecord> = reader.records().map(|r| r.unwrap()).collect();
-        assert_eq!(rows.len(), 3);
-
-        // Row 0: pos=100, up=10, down=0
-        assert_eq!(&rows[0][0], "test_region");
-        assert_eq!(&rows[0][1], "chr1");
-        assert_eq!(&rows[0][2], "+");
-        assert_eq!(&rows[0][3], "100");
-        assert_eq!(&rows[0][4], "10");
-        assert_eq!(&rows[0][5], "0");
-
-        // Row 1: pos=101, up=20, down=5
-        assert_eq!(&rows[1][3], "101");
-        assert_eq!(&rows[1][4], "20");
-        assert_eq!(&rows[1][5], "5");
-    }
-
-    #[test]
-    fn tsv_header_present_when_true() {
-        let region = PileRegion::new("chr1".into(), 100, 100, "t".into(), Strand::Forward).unwrap();
-        let map = CoverageMap::new(100, 100);
-        let batch = to_record_batch(region, map).unwrap();
-
-        let mut buf = Vec::new();
-        write_output(&batch, OutputFormat::Tsv, &mut buf, true).unwrap();
-
-        let output = String::from_utf8(buf).unwrap();
-        let first_line = output.lines().next().unwrap();
-        assert_eq!(first_line, "name\tseq\tstrand\tpos\tup\tdown");
-    }
-
-    #[test]
-    fn tsv_header_absent_when_false() {
-        let region = PileRegion::new("chr1".into(), 100, 100, "t".into(), Strand::Forward).unwrap();
-        let map = CoverageMap::new(100, 100);
-        let batch = to_record_batch(region, map).unwrap();
-
-        let mut buf = Vec::new();
-        write_output(&batch, OutputFormat::Tsv, &mut buf, false).unwrap();
-
-        let output = String::from_utf8(buf).unwrap();
-        let first_line = output.lines().next().unwrap();
-        // First line should be data, not header
-        assert!(first_line.starts_with("t\tchr1\t+\t100\t"));
-    }
-
-    #[test]
     fn arrow_ipc_round_trip() {
         let region =
             PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Reverse).unwrap();
@@ -390,11 +228,17 @@ mod tests {
         let batch = to_record_batch(region, map).unwrap();
 
         let mut buf = Vec::new();
-        write_output(&batch, OutputFormat::Arrow, &mut buf, true).unwrap();
+        {
+            let mut w =
+                arrow::ipc::writer::StreamWriter::try_new_buffered(&mut buf, &batch.schema())
+                    .unwrap();
+            w.write(&batch).unwrap();
+            w.flush().unwrap();
+            w.finish().unwrap();
+        }
 
-        // Read back
         let cursor = std::io::Cursor::new(buf);
-        let reader = arrow::ipc::reader::FileReader::try_new(cursor, None).unwrap();
+        let reader = arrow::ipc::reader::StreamReader::try_new(cursor, None).unwrap();
         let batches: Vec<_> = reader.into_iter().map(|b| b.unwrap()).collect();
         assert_eq!(batches.len(), 1);
 
@@ -412,6 +256,8 @@ mod tests {
 
     #[test]
     fn parquet_round_trip() {
+        use parquet::arrow::ArrowWriter;
+
         let region =
             PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Either).unwrap();
         let mut map = CoverageMap::new(100, 102);
@@ -420,8 +266,18 @@ mod tests {
 
         let batch = to_record_batch(region, map).unwrap();
 
+        let props = WriterProperties::builder()
+            .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
+            .set_column_encoding(ColumnPath::from("pos"), Encoding::DELTA_BINARY_PACKED)
+            .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
+            .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
+            .set_compression(parquet::basic::Compression::SNAPPY)
+            .build();
+
         let mut buf = Vec::new();
-        write_output(&batch, OutputFormat::Parquet, &mut buf, true).unwrap();
+        let mut w = ArrowWriter::try_new(&mut buf, batch.schema(), Some(props)).unwrap();
+        w.write(&batch).unwrap();
+        w.close().unwrap();
 
         // Read back
         let bytes = bytes::Bytes::from(buf);

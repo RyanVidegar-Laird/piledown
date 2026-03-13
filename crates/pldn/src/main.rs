@@ -6,8 +6,9 @@ use clap::Parser;
 use log::info;
 use noodles::sam::alignment::record::Flags;
 use piledown::engine::{runtime, EngineConfig, PileEngine};
-use piledown::output::{to_record_batch, write_output};
+use piledown::output::{write_stream_as_arrow, write_stream_as_parquet, write_stream_as_tsv};
 use piledown::region::{read_regions_tsv, PileRegion};
+use piledown::types::OutputFormat;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -26,7 +27,6 @@ fn main() -> Result<()> {
 
     let exclude_flags = cli.exclude.map(Flags::from);
 
-    // Build region list
     let regions = if let Some(region_str) = &cli.region {
         let strand = cli
             .strand
@@ -51,41 +51,40 @@ fn main() -> Result<()> {
         lib_type: cli.lib_fragment_type,
         concurrency: cli.concurrency,
         index_path: cli.bam_index,
-        chunk_size: None,
+        chunk_size: cli.chunk_size,
     };
 
     let engine = PileEngine::new(config);
     let rt = runtime();
+    rt.block_on(async {
+        let stream = engine.run(regions);
+        match cli.output_format {
+            OutputFormat::Tsv => {
+                let stdout = tokio::io::stdout();
+                write_stream_as_tsv(stream, stdout).await
+            }
+            OutputFormat::Arrow => {
+                let stdout = std::io::stdout();
+                write_stream_as_arrow(stream, stdout).await
+            }
+            OutputFormat::Parquet => {
+                use parquet::basic::{Compression, Encoding};
+                use parquet::file::properties::WriterProperties;
+                use parquet::schema::types::ColumnPath;
 
-    let stdout = std::io::stdout();
-
-    // Collect all results from the stream, then output
-    let results: Vec<_> = rt.block_on(async {
-        use futures::stream::StreamExt;
-        let stream = std::pin::pin!(engine.run(regions));
-        stream
-            .collect::<Vec<Result<_>>>()
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>>>()
+                let props = WriterProperties::builder()
+                    .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
+                    .set_column_encoding(ColumnPath::from("pos"), Encoding::DELTA_BINARY_PACKED)
+                    .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
+                    .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
+                    .set_compression(Compression::SNAPPY)
+                    .set_max_row_group_size(cli.row_group_size)
+                    .build();
+                let stdout = tokio::io::stdout();
+                write_stream_as_parquet(stream, stdout, Some(props)).await
+            }
+        }
     })?;
-
-    if cli.output_format == piledown::types::OutputFormat::Tsv {
-        for (i, (region, map)) in results.into_iter().enumerate() {
-            let batch = to_record_batch(region, map)?;
-            write_output(&batch, cli.output_format, &stdout, i == 0)?;
-        }
-    } else {
-        let batches: Vec<_> = results
-            .into_iter()
-            .map(|(r, m)| to_record_batch(r, m))
-            .collect::<Result<Vec<_>>>()?;
-        if batches.is_empty() {
-            return Err(anyhow!("no regions produced output"));
-        }
-        let combined = arrow::compute::concat_batches(&batches[0].schema(), &batches)?;
-        write_output(&combined, cli.output_format, stdout, true)?;
-    }
 
     info!("Done!");
     Ok(())

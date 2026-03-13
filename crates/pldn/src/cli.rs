@@ -39,6 +39,14 @@ pub struct Cli {
     #[arg(long)]
     pub bam_index: Option<std::path::PathBuf>,
 
+    /// Maximum positions per output batch (splits large regions)
+    #[arg(long)]
+    pub chunk_size: Option<usize>,
+
+    /// Parquet row group size (default: 1000000). Only used with --output-format parquet.
+    #[arg(long, default_value_t = 1_000_000)]
+    pub row_group_size: usize,
+
     /// Max concurrent region queries
     #[arg(long, default_value_t = 4)]
     pub concurrency: usize,

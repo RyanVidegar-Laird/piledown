@@ -1633,13 +1633,12 @@ name = "pldn"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arrow",
  "clap",
  "clap-verbosity-flag",
  "env_logger",
- "futures",
  "log",
  "noodles",
+ "parquet",
  "piledown",
  "tokio",
 ]
