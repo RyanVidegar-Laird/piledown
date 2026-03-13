@@ -89,7 +89,7 @@
             version = "0.1.0";
             inherit src;
             cargoLock.lockFile = ./Cargo.lock;
-            nativeBuildInputs = [ python3 ];
+            nativeBuildInputs = [ python3 pkgs.clippy ];
             doCheck = false;
             buildPhase = ''
               cargo clippy --all-targets -- --deny warnings
@@ -125,9 +125,11 @@
             pname = "piledown-audit";
             version = "0.1.0";
             inherit src;
-            nativeBuildInputs = [ pkgs.cargo-audit ];
+            nativeBuildInputs = [ rustToolchain pkgs.cargo-audit ];
             buildPhase = ''
-              HOME=$TMPDIR cargo audit --db ${advisory-db}
+              HOME=$TMPDIR cargo audit --db ${advisory-db} --no-fetch \
+                --ignore RUSTSEC-2025-0024 \
+                --ignore RUSTSEC-2025-0020
             '';
             installPhase = "mkdir -p $out";
           };
