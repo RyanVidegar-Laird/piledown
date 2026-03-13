@@ -148,10 +148,8 @@ mod pyledown {
             }
 
             let schema = batches[0].schema();
-            let reader = arrow::record_batch::RecordBatchIterator::new(
-                batches.into_iter().map(Ok),
-                schema,
-            );
+            let reader =
+                arrow::record_batch::RecordBatchIterator::new(batches.into_iter().map(Ok), schema);
 
             Ok(PyArrowType(Box::new(reader)))
         }
@@ -173,8 +171,8 @@ mod pyledown {
                     })
                     .collect()
             } else if let Some(path) = &self.regions_file {
-                let file = std::fs::File::open(path)
-                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                let file =
+                    std::fs::File::open(path).map_err(|e| PyValueError::new_err(e.to_string()))?;
                 piledown::region::read_regions_tsv(file)
                     .map_err(|e| PyValueError::new_err(e.to_string()))
             } else {

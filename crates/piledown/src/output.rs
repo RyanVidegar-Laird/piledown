@@ -375,11 +375,9 @@ mod streaming_tests {
 
     #[tokio::test]
     async fn stream_arrow_multi_batch() {
-        let r1 =
-            PileRegion::new("chr1".into(), 100, 101, "r1".into(), Strand::Forward).unwrap();
+        let r1 = PileRegion::new("chr1".into(), 100, 101, "r1".into(), Strand::Forward).unwrap();
         let m1 = CoverageMap::new(100, 101);
-        let r2 =
-            PileRegion::new("chr1".into(), 200, 202, "r2".into(), Strand::Reverse).unwrap();
+        let r2 = PileRegion::new("chr1".into(), 200, 202, "r2".into(), Strand::Reverse).unwrap();
         let m2 = CoverageMap::new(200, 202);
 
         let items: Vec<Result<(PileRegion, CoverageMap)>> = vec![Ok((r1, m1)), Ok((r2, m2))];
