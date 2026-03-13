@@ -143,6 +143,112 @@ pub fn write_output(
     Ok(())
 }
 
+#[cfg(feature = "async")]
+pub async fn write_stream_as_tsv<W: tokio::io::AsyncWrite + Unpin + Send>(
+    stream: impl futures::Stream<Item = Result<(PileRegion, CoverageMap)>>,
+    writer: W,
+) -> Result<()> {
+    use csv_async::AsyncWriterBuilder;
+    use futures::StreamExt;
+
+    let mut csv_writer = AsyncWriterBuilder::new()
+        .delimiter(b'\t')
+        .create_serializer(writer);
+
+    csv_writer
+        .serialize(("name", "seq", "strand", "pos", "up", "down"))
+        .await?;
+
+    let mut stream = std::pin::pin!(stream);
+    while let Some(result) = stream.next().await {
+        let (region, map) = result?;
+        for i in 0..map.len() {
+            csv_writer
+                .serialize((
+                    &region.name,
+                    &region.seq,
+                    region.strand.as_ref(),
+                    map.start + i as u64,
+                    map.up[i],
+                    map.down[i],
+                ))
+                .await?;
+        }
+    }
+    csv_writer.flush().await?;
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+pub async fn write_stream_as_arrow(
+    stream: impl futures::Stream<Item = Result<(PileRegion, CoverageMap)>>,
+    writer: impl std::io::Write,
+) -> Result<()> {
+    use futures::StreamExt;
+
+    let mut stream = std::pin::pin!(stream);
+
+    let first = match stream.next().await {
+        Some(result) => result?,
+        None => return Ok(()),
+    };
+
+    let first_batch = to_record_batch(first.0, first.1)?;
+    let mut w = arrow::ipc::writer::StreamWriter::try_new_buffered(writer, &first_batch.schema())?;
+    w.write(&first_batch)?;
+
+    while let Some(result) = stream.next().await {
+        let (region, map) = result?;
+        let batch = to_record_batch(region, map)?;
+        w.write(&batch)?;
+    }
+
+    w.flush()?;
+    w.finish()?;
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+pub async fn write_stream_as_parquet(
+    stream: impl futures::Stream<Item = Result<(PileRegion, CoverageMap)>>,
+    writer: impl tokio::io::AsyncWrite + Unpin + Send,
+    props: Option<WriterProperties>,
+) -> Result<()> {
+    use futures::StreamExt;
+    use parquet::arrow::async_writer::AsyncArrowWriter;
+
+    let mut stream = std::pin::pin!(stream);
+
+    let first = match stream.next().await {
+        Some(result) => result?,
+        None => return Ok(()),
+    };
+
+    let first_batch = to_record_batch(first.0, first.1)?;
+
+    let writer_props = props.unwrap_or_else(|| {
+        WriterProperties::builder()
+            .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
+            .set_column_encoding(ColumnPath::from("pos"), Encoding::DELTA_BINARY_PACKED)
+            .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
+            .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
+            .set_compression(parquet::basic::Compression::SNAPPY)
+            .build()
+    });
+
+    let mut w = AsyncArrowWriter::try_new(writer, first_batch.schema(), Some(writer_props))?;
+    w.write(&first_batch).await?;
+
+    while let Some(result) = stream.next().await {
+        let (region, map) = result?;
+        let batch = to_record_batch(region, map)?;
+        w.write(&batch).await?;
+    }
+
+    w.close().await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,5 +484,59 @@ mod tests {
             .unwrap();
         assert_eq!(pos_col.value(0), 100);
         assert_eq!(pos_col.value(4), 104);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "async")]
+mod streaming_tests {
+    use super::*;
+    use crate::coverage::CoverageMap;
+    use crate::region::PileRegion;
+    use crate::types::Strand;
+    use futures::stream;
+
+    #[tokio::test]
+    async fn stream_arrow_round_trip() {
+        let region =
+            PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Reverse).unwrap();
+        let mut map = CoverageMap::new(100, 102);
+        map.up[1] = 42;
+        map.down[1] = 7;
+
+        let items: Vec<Result<(PileRegion, CoverageMap)>> = vec![Ok((region, map))];
+        let s = stream::iter(items);
+
+        let mut buf = Vec::new();
+        write_stream_as_arrow(s, &mut buf).await.unwrap();
+
+        let cursor = std::io::Cursor::new(buf);
+        let reader = arrow::ipc::reader::StreamReader::try_new(cursor, None).unwrap();
+        let batches: Vec<_> = reader.into_iter().map(|b| b.unwrap()).collect();
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].num_rows(), 3);
+    }
+
+    #[tokio::test]
+    async fn stream_arrow_multi_batch() {
+        let r1 =
+            PileRegion::new("chr1".into(), 100, 101, "r1".into(), Strand::Forward).unwrap();
+        let m1 = CoverageMap::new(100, 101);
+        let r2 =
+            PileRegion::new("chr1".into(), 200, 202, "r2".into(), Strand::Reverse).unwrap();
+        let m2 = CoverageMap::new(200, 202);
+
+        let items: Vec<Result<(PileRegion, CoverageMap)>> = vec![Ok((r1, m1)), Ok((r2, m2))];
+        let s = stream::iter(items);
+
+        let mut buf = Vec::new();
+        write_stream_as_arrow(s, &mut buf).await.unwrap();
+
+        let cursor = std::io::Cursor::new(buf);
+        let reader = arrow::ipc::reader::StreamReader::try_new(cursor, None).unwrap();
+        let batches: Vec<_> = reader.into_iter().map(|b| b.unwrap()).collect();
+        assert_eq!(batches.len(), 2);
+        assert_eq!(batches[0].num_rows(), 2);
+        assert_eq!(batches[1].num_rows(), 3);
     }
 }

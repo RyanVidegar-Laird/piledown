@@ -11,6 +11,7 @@ anyhow.workspace = true
 arrow.workspace = true
 clap = {workspace = true, optional = true}
 csv.workspace = true
+csv-async = { workspace = true, optional = true }
 fnv.workspace = true
 futures = { workspace = true, optional = true }
 indexmap.workspace = true
@@ -31,7 +32,7 @@ tokio = { workspace = true }
 [features]
 python = ["dep:pyo3"]
 cli = ["dep:clap"]
-async = ["dep:tokio", "dep:futures"]
+async = ["dep:tokio", "dep:futures", "dep:csv-async"]
 
 [[bench]]
 name = "coverage"
