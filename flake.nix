@@ -21,7 +21,7 @@
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           cargoBuildFlags = [ "-p" "pldn" ];
-          nativeBuildInputs = [ python3 ];
+          nativeBuildInputs = [ python3 pkgs.R ];
           doCheck = false; # tests run separately in checks
         };
 
@@ -51,6 +51,17 @@
           seaborn
         ]);
 
+        rEnv = pkgs.rWrapper.override {
+          packages = with pkgs.rPackages; [
+            arrow
+            nanoarrow
+            devtools
+            roxygen2
+            rextendr
+            testthat
+          ];
+        };
+
         devPkgs = with pkgs; [
           cargo-edit
           cargo-generate
@@ -61,6 +72,7 @@
           pyright
           ruff
           pythonEnv
+          rEnv
         ];
 
       in
@@ -73,7 +85,7 @@
             version = "0.1.0";
             inherit src;
             cargoLock.lockFile = ./Cargo.lock;
-            nativeBuildInputs = [ python3 pkgs.clippy ];
+            nativeBuildInputs = [ python3 pkgs.R pkgs.clippy ];
             doCheck = false;
             buildPhase = ''
               cargo clippy --all-targets -- --deny warnings
@@ -97,7 +109,7 @@
             version = "0.1.0";
             inherit src;
             cargoLock.lockFile = ./Cargo.lock;
-            nativeBuildInputs = [ pkgs.cargo-nextest python3 ];
+            nativeBuildInputs = [ pkgs.cargo-nextest python3 pkgs.R ];
             doCheck = false;
             buildPhase = ''
               cargo nextest run
@@ -114,7 +126,7 @@
             version = "0.1.0";
             inherit src;
             cargoLock.lockFile = ./Cargo.lock;
-            nativeBuildInputs = [ python3 ];
+            nativeBuildInputs = [ python3 pkgs.R ];
             doCheck = false;
             buildPhase = ''
               cargo doc --no-deps

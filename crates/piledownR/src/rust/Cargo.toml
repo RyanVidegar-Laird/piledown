@@ -1,0 +1,16 @@
+[package]
+name = "piledownR"
+publish = false
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+piledown = { workspace = true, features = ["async"] }
+extendr-api.workspace = true
+arrow = { workspace = true, features = ["ffi"] }
+noodles.workspace = true
+anyhow.workspace = true
+futures.workspace = true

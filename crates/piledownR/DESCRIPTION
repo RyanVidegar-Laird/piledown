@@ -1,0 +1,17 @@
+Package: piledownR
+Title: Per-Base Coverage from RNASeq BAMs
+Version: 0.1.0
+Authors@R: person("piledown authors", role = c("aut", "cre"),
+    email = "noreply@example.com")
+Description: Computes per-base coverage (pileup) from RNASeq BAM files,
+    tracking matched and skipped bases separately. Strand-aware using
+    library fragment type (ISR/ISF). Returns Arrow RecordBatches.
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Imports: arrow, nanoarrow
+Suggests: testthat (>= 3.0.0)
+SystemRequirements: Cargo (Rust's package manager), rustc
+Config/testthat/edition: 3
+Config/rextendr/version: 0.4.1
+RoxygenNote: 7.3.2

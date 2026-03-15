@@ -1,0 +1,36 @@
+#!/usr/bin/env sh
+
+# Check for cargo
+CARGO=$(command -v cargo 2>/dev/null)
+if [ -z "$CARGO" ]; then
+    CARGO="$HOME/.cargo/bin/cargo"
+fi
+
+if [ ! -x "$CARGO" ]; then
+    echo "------------ CONFIGURATION ERROR ------------"
+    echo "Could not find 'cargo' on PATH or at ~/.cargo/bin/cargo."
+    echo ""
+    echo "Install the Rust toolchain: https://rustup.rs"
+    echo "----------------------------------------------"
+    exit 1
+fi
+
+# Check for rustc
+RUSTC=$(command -v rustc 2>/dev/null)
+if [ -z "$RUSTC" ]; then
+    RUSTC="$HOME/.cargo/bin/rustc"
+fi
+
+if [ ! -x "$RUSTC" ]; then
+    echo "------------ CONFIGURATION ERROR ------------"
+    echo "Could not find 'rustc' on PATH or at ~/.cargo/bin/rustc."
+    echo ""
+    echo "Install the Rust toolchain: https://rustup.rs"
+    echo "----------------------------------------------"
+    exit 1
+fi
+
+echo "Using cargo: $CARGO"
+echo "Cargo version: $($CARGO --version)"
+echo "Using rustc: $RUSTC"
+echo "Rustc version: $($RUSTC --version)"
