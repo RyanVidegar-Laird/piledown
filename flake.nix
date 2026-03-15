@@ -43,6 +43,36 @@
           dependencies = with python3.pkgs; [ pyarrow ];
         };
 
+        # R package — uses full repo src so cargo can find workspace root
+        piledownR = pkgs.rPackages.buildRPackage {
+          name = "piledownR";
+          src = ./.;
+          postUnpack = ''
+            # cargoSetupHook expects Cargo.lock at sourceRoot.
+            # Copy it from the workspace root before we narrow sourceRoot.
+            cp "$sourceRoot/Cargo.lock" "$sourceRoot/crates/piledownR/Cargo.lock"
+            sourceRoot="$sourceRoot/crates/piledownR"
+          '';
+          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+            src = ./.;
+            hash = "sha256-pq/slgc8qd/ym6zW7Y9IJRH3GxugZLwBFxgmOTHfdt4=";
+          };
+          nativeBuildInputs = with pkgs; [
+            rustPlatform.cargoSetupHook
+            cargo
+            rustc
+          ];
+          propagatedBuildInputs = with pkgs.rPackages; [ arrow nanoarrow ];
+          # cargoSetupHook sets up vendoring at the workspace root level.
+          # We need to ensure it finds Cargo.lock in the full repo.
+          postPatch = ''
+            patchShebangs configure
+          '';
+          preBuild = ''
+            export CARGO_HOME=$TMPDIR/.cargo
+          '';
+        };
+
         # Shared source for check derivations
         src = pkgs.lib.cleanSource ./.;
 
@@ -121,6 +151,22 @@
           # doesn't support CVSS 4.0 format used in current advisory-db.
           # Re-enable once nixpkgs ships cargo-audit >= 0.22.
 
+          piledownR-integration = pkgs.stdenv.mkDerivation {
+            pname = "piledownR-integration";
+            version = "0.1.0";
+            src = pkgs.lib.cleanSource ./.;
+            nativeBuildInputs = [
+              (pkgs.rWrapper.override {
+                packages = [ piledownR pkgs.rPackages.testthat pkgs.rPackages.arrow pkgs.rPackages.nanoarrow ];
+              })
+            ];
+            buildPhase = ''
+              cd crates/piledownR
+              Rscript -e "library(piledownR); testthat::test_dir('tests/testthat', stop_on_failure = TRUE)"
+            '';
+            installPhase = "mkdir -p $out";
+          };
+
           doc = pkgs.rustPlatform.buildRustPackage {
             pname = "piledown-doc";
             version = "0.1.0";
@@ -137,7 +183,7 @@
 
         packages = {
           default = pldn;
-          inherit pldn pyledown;
+          inherit pldn pyledown piledownR;
         };
 
         devShells.default = pkgs.mkShell {
