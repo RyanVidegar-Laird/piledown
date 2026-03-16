@@ -10,3 +10,6 @@ noodles.workspace = true
 anyhow.workspace = true
 futures.workspace = true
 pyo3.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
