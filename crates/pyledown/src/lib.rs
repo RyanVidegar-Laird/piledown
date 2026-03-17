@@ -174,7 +174,12 @@ mod pyledown {
                 }
             } else if regions.is_some() {
                 // Path 2: reject companions from other groups
-                if name.is_some() || strand.is_some() || seqs.is_some() || starts.is_some() || ends.is_some() {
+                if name.is_some()
+                    || strand.is_some()
+                    || seqs.is_some()
+                    || starts.is_some()
+                    || ends.is_some()
+                {
                     return Err(PyValueError::new_err(
                         "region strings mode: use 'names' and 'strands', not single or decomposed parameters",
                     ));
@@ -396,7 +401,6 @@ mod pyledown {
             )
         }
     }
-
 }
 
 #[cfg(test)]

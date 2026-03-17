@@ -6,10 +6,17 @@
 \usage{
 pile_params(
   input_bam,
-  strand,
   lib_fragment_type,
   region = NULL,
+  name = NULL,
+  strand = NULL,
   regions = NULL,
+  names = NULL,
+  strands = NULL,
+  seqs = NULL,
+  starts = NULL,
+  ends = NULL,
+  regions_df = NULL,
   regions_file = NULL,
   exclude_flags = NULL,
   index_path = NULL,
@@ -20,13 +27,27 @@ pile_params(
 \arguments{
 \item{input_bam}{Path to indexed BAM file.}
 
-\item{strand}{One of "forward", "reverse", "either".}
-
 \item{lib_fragment_type}{One of "isr", "isf".}
 
-\item{region}{Optional region string (e.g. "chr1:100-200").}
+\item{region}{Optional single region string (e.g. "chr1:100-200").}
+
+\item{name}{Region name (required with \code{region}).}
+
+\item{strand}{Strand string (required with \code{region}).}
 
 \item{regions}{Optional character vector of region strings.}
+
+\item{names}{Character vector of region names.}
+
+\item{strands}{Character vector of strand strings.}
+
+\item{seqs}{Optional character vector of sequence names.}
+
+\item{starts}{Numeric vector of start positions.}
+
+\item{ends}{Numeric vector of end positions.}
+
+\item{regions_df}{Optional data.frame or tibble with columns: seq, start, end, name, strand.}
 
 \item{regions_file}{Optional path to TSV regions file.}
 
@@ -42,5 +63,7 @@ pile_params(
 A PileParams object.
 }
 \description{
-Create a new PileParams for coverage computation.
+Exactly one region source must be provided: \code{region} (single),
+\code{regions} (parallel vectors), \code{seqs} (decomposed vectors),
+\code{regions_df} (data.frame/tibble), or \code{regions_file} (TSV path).
 }

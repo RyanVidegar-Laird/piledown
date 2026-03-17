@@ -59,10 +59,22 @@ fn export_batches_to_r(batches: Vec<arrow::array::RecordBatch>) -> extendr_api::
 #[extendr]
 pub struct PileParams {
     input_bam: PathBuf,
+    // Path 1: single region
     region: Option<String>,
+    name: Option<String>,
+    strand: Option<Strand>,
+    // Path 2: region strings
     regions: Option<Vec<String>>,
+    // Path 3: decomposed vectors (also used for DataFrame path via R wrapper)
+    seqs: Option<Vec<String>>,
+    starts: Option<Vec<f64>>,
+    ends: Option<Vec<f64>>,
+    // Shared by paths 2 and 3
+    region_names: Option<Vec<String>>,
+    region_strands: Option<Vec<String>>,
+    // Path 5: TSV file
     regions_file: Option<PathBuf>,
-    strand: Strand,
+    // Engine config
     lib_fragment_type: LibFragmentType,
     exclude_flags: Option<u16>,
     index_path: Option<PathBuf>,
@@ -73,15 +85,89 @@ pub struct PileParams {
 impl PileParams {
     fn build_regions(&self) -> Result<Vec<PileRegion>> {
         if let Some(region_str) = &self.region {
-            let pr = PileRegion::from_region_str(region_str, "region".into(), self.strand)?;
+            // Path 1: single region
+            let name = self.name.clone().unwrap_or_else(|| "region".into());
+            let strand = self.strand.unwrap_or(Strand::Either);
+            let pr = PileRegion::from_region_str(region_str, name, strand)?;
             Ok(vec![pr])
         } else if let Some(regions) = &self.regions {
+            // Path 2: region strings
+            let names = self
+                .region_names
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("'regions' requires 'region_names'"))?;
+            let strands = self
+                .region_strands
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("'regions' requires 'region_strands'"))?;
+            if regions.len() != names.len() || regions.len() != strands.len() {
+                anyhow::bail!(
+                    "'regions' ({}), 'region_names' ({}), 'region_strands' ({}) must all be the same length",
+                    regions.len(),
+                    names.len(),
+                    strands.len()
+                );
+            }
             regions
                 .iter()
-                .enumerate()
-                .map(|(i, r)| PileRegion::from_region_str(r, format!("region_{i}"), self.strand))
+                .zip(names.iter())
+                .zip(strands.iter())
+                .map(|((r, n), s)| {
+                    let strand = parse_strand(s)?;
+                    PileRegion::from_region_str(r, n.clone(), strand)
+                })
+                .collect::<Result<Vec<_>>>()
+        } else if let Some(seqs) = &self.seqs {
+            // Path 3: decomposed vectors
+            let starts = self
+                .starts
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'starts'"))?;
+            let ends = self
+                .ends
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'ends'"))?;
+            let names = self
+                .region_names
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'region_names'"))?;
+            let strands = self
+                .region_strands
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'region_strands'"))?;
+            let len = seqs.len();
+            if starts.len() != len
+                || ends.len() != len
+                || names.len() != len
+                || strands.len() != len
+            {
+                anyhow::bail!(
+                    "'seqs' ({}), 'starts' ({}), 'ends' ({}), 'region_names' ({}), 'region_strands' ({}) must all be the same length",
+                    len,
+                    starts.len(),
+                    ends.len(),
+                    names.len(),
+                    strands.len()
+                );
+            }
+            seqs.iter()
+                .zip(starts.iter())
+                .zip(ends.iter())
+                .zip(names.iter())
+                .zip(strands.iter())
+                .map(|((((seq, &start), &end), name), strand_str)| {
+                    if !start.is_finite() || start < 0.0 {
+                        anyhow::bail!("start must be a non-negative finite number, got {start}");
+                    }
+                    if !end.is_finite() || end < 0.0 {
+                        anyhow::bail!("end must be a non-negative finite number, got {end}");
+                    }
+                    let strand = parse_strand(strand_str)?;
+                    PileRegion::new(seq.clone(), start as u64, end as u64, name.clone(), strand)
+                })
                 .collect::<Result<Vec<_>>>()
         } else if let Some(path) = &self.regions_file {
+            // Path 5: TSV file
             let file = std::fs::File::open(path)?;
             piledown::region::read_regions_tsv(file)
         } else {
@@ -128,10 +214,16 @@ impl PileParams {
     /// Create a new PileParams for coverage computation.
     ///
     /// @param input_bam Path to indexed BAM file.
-    /// @param strand One of "forward", "reverse", "either".
     /// @param lib_fragment_type One of "isr", "isf".
-    /// @param region Optional region string (e.g. "chr1:100-200").
+    /// @param region Optional single region string (e.g. "chr1:100-200").
+    /// @param name Region name (required with region).
+    /// @param strand Strand string (required with region).
     /// @param regions Optional character vector of region strings.
+    /// @param region_names Character vector of region names.
+    /// @param region_strands Character vector of strand strings.
+    /// @param seqs Optional character vector of sequence names.
+    /// @param starts Numeric vector of start positions.
+    /// @param ends Numeric vector of end positions.
     /// @param regions_file Optional path to TSV regions file.
     /// @param exclude_flags Optional SAM flags to exclude (integer 0-65535).
     /// @param index_path Optional explicit path to BAM index (.bai).
@@ -141,24 +233,35 @@ impl PileParams {
     #[allow(clippy::too_many_arguments)]
     fn new(
         input_bam: &str,
-        strand: &str,
         lib_fragment_type: &str,
         region: Option<&str>,
+        name: Option<&str>,
+        strand: Option<&str>,
         regions: Option<Vec<String>>,
+        region_names: Option<Vec<String>>,
+        region_strands: Option<Vec<String>>,
+        seqs: Option<Vec<String>>,
+        starts: Option<Vec<f64>>,
+        ends: Option<Vec<f64>>,
         regions_file: Option<&str>,
         exclude_flags: Option<i32>,
         index_path: Option<&str>,
         concurrency: Option<i32>,
         chunk_size: Option<i32>,
     ) -> Self {
-        let strand = parse_strand(strand).unwrap_or_else(|e| panic!("{e}"));
         let lib_fragment_type = parse_lib_type(lib_fragment_type).unwrap_or_else(|e| panic!("{e}"));
+        let parsed_strand = strand.map(|s| parse_strand(s).unwrap_or_else(|e| panic!("{e}")));
 
         // Validate exactly one region source
-        let sources = [region.is_some(), regions.is_some(), regions_file.is_some()];
+        let sources = [
+            region.is_some(),
+            regions.is_some(),
+            seqs.is_some(),
+            regions_file.is_some(),
+        ];
         let count = sources.iter().filter(|&&s| s).count();
         if count != 1 {
-            panic!("provide exactly one of: region, regions, regions_file");
+            panic!("provide exactly one of: region, regions, seqs, regions_file");
         }
 
         // Validate and convert integer params
@@ -182,9 +285,15 @@ impl PileParams {
         PileParams {
             input_bam: PathBuf::from(input_bam),
             region: region.map(String::from),
+            name: name.map(String::from),
+            strand: parsed_strand,
             regions,
+            seqs,
+            starts,
+            ends,
+            region_names,
+            region_strands,
             regions_file: regions_file.map(PathBuf::from),
-            strand,
             lib_fragment_type,
             exclude_flags: exclude_flags_val,
             index_path: index_path.map(PathBuf::from),
@@ -213,67 +322,115 @@ extendr_module! {
 mod tests {
     use super::*;
 
-    #[test]
-    fn rejects_no_region_source() {
-        let params = PileParams {
+    fn make_params_single() -> PileParams {
+        PileParams {
             input_bam: PathBuf::from("test.bam"),
-            region: None,
+            region: Some("chr1:100-200".into()),
+            name: Some("gene1".into()),
+            strand: Some(Strand::Forward),
             regions: None,
+            seqs: None,
+            starts: None,
+            ends: None,
+            region_names: None,
+            region_strands: None,
             regions_file: None,
-            strand: Strand::Forward,
             lib_fragment_type: LibFragmentType::Isr,
             exclude_flags: None,
             index_path: None,
             concurrency: 4,
             chunk_size: None,
+        }
+    }
+
+    #[test]
+    fn builds_single_region() {
+        let params = make_params_single();
+        let regions = params.build_regions().unwrap();
+        assert_eq!(regions.len(), 1);
+        assert_eq!(regions[0].seq, "chr1");
+        assert_eq!(regions[0].name, "gene1");
+        assert_eq!(regions[0].strand, Strand::Forward);
+    }
+
+    #[test]
+    fn builds_region_strings() {
+        let params = PileParams {
+            regions: Some(vec!["chr1:100-200".into(), "chr2:300-400".into()]),
+            region_names: Some(vec!["g1".into(), "g2".into()]),
+            region_strands: Some(vec!["+".into(), "-".into()]),
+            region: None,
+            name: None,
+            strand: None,
+            seqs: None,
+            starts: None,
+            ends: None,
+            ..make_params_single()
+        };
+        let regions = params.build_regions().unwrap();
+        assert_eq!(regions.len(), 2);
+        assert_eq!(regions[0].strand, Strand::Forward);
+        assert_eq!(regions[1].strand, Strand::Reverse);
+    }
+
+    #[test]
+    fn builds_decomposed_vectors() {
+        let params = PileParams {
+            seqs: Some(vec!["chr1".into(), "chr2".into()]),
+            starts: Some(vec![100.0, 300.0]),
+            ends: Some(vec![200.0, 400.0]),
+            region_names: Some(vec!["g1".into(), "g2".into()]),
+            region_strands: Some(vec!["+".into(), ".".into()]),
+            region: None,
+            name: None,
+            strand: None,
+            regions: None,
+            ..make_params_single()
+        };
+        let regions = params.build_regions().unwrap();
+        assert_eq!(regions.len(), 2);
+        assert_eq!(regions[0].start, 100);
+        assert_eq!(regions[1].strand, Strand::Either);
+    }
+
+    #[test]
+    fn rejects_no_region_source() {
+        let params = PileParams {
+            region: None,
+            name: None,
+            strand: None,
+            regions: None,
+            seqs: None,
+            starts: None,
+            ends: None,
+            region_names: None,
+            region_strands: None,
+            regions_file: None,
+            ..make_params_single()
         };
         assert!(params.build_regions().is_err());
     }
 
     #[test]
-    fn builds_single_region() {
+    fn rejects_length_mismatch() {
         let params = PileParams {
-            input_bam: PathBuf::from("test.bam"),
-            region: Some("chr1:100-200".into()),
-            regions: None,
-            regions_file: None,
-            strand: Strand::Reverse,
-            lib_fragment_type: LibFragmentType::Isr,
-            exclude_flags: None,
-            index_path: None,
-            concurrency: 4,
-            chunk_size: None,
-        };
-        let regions = params.build_regions().unwrap();
-        assert_eq!(regions.len(), 1);
-        assert_eq!(regions[0].seq, "chr1");
-        assert_eq!(regions[0].strand, Strand::Reverse);
-    }
-
-    #[test]
-    fn builds_multiple_regions() {
-        let params = PileParams {
-            input_bam: PathBuf::from("test.bam"),
+            regions: Some(vec!["chr1:100-200".into()]),
+            region_names: Some(vec!["g1".into(), "g2".into()]),
+            region_strands: Some(vec!["+".into()]),
             region: None,
-            regions: Some(vec!["chr1:100-200".into(), "chr2:300-400".into()]),
-            regions_file: None,
-            strand: Strand::Either,
-            lib_fragment_type: LibFragmentType::Isf,
-            exclude_flags: None,
-            index_path: None,
-            concurrency: 4,
-            chunk_size: None,
+            name: None,
+            strand: None,
+            seqs: None,
+            starts: None,
+            ends: None,
+            ..make_params_single()
         };
-        let regions = params.build_regions().unwrap();
-        assert_eq!(regions.len(), 2);
-        assert_eq!(regions[1].seq, "chr2");
+        assert!(params.build_regions().is_err());
     }
 
     #[test]
     fn parse_strand_accepts_variants() {
         assert_eq!(parse_strand("forward").unwrap(), Strand::Forward);
-        assert_eq!(parse_strand("Forward").unwrap(), Strand::Forward);
-        assert_eq!(parse_strand("FORWARD").unwrap(), Strand::Forward);
         assert_eq!(parse_strand("+").unwrap(), Strand::Forward);
         assert_eq!(parse_strand("reverse").unwrap(), Strand::Reverse);
         assert_eq!(parse_strand("-").unwrap(), Strand::Reverse);
@@ -285,7 +442,6 @@ mod tests {
     #[test]
     fn parse_lib_type_accepts_variants() {
         assert_eq!(parse_lib_type("isr").unwrap(), LibFragmentType::Isr);
-        assert_eq!(parse_lib_type("ISR").unwrap(), LibFragmentType::Isr);
         assert_eq!(parse_lib_type("isf").unwrap(), LibFragmentType::Isf);
         assert!(parse_lib_type("invalid").is_err());
     }

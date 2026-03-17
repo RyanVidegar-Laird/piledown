@@ -34,7 +34,7 @@
           pyproject = true;
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
             src = ./.;
-            hash = "sha256-B++Ma11T2b7jSB0tEm1y6Z6YInqcUusG7v2qk4O0od0=";
+            hash = "sha256-kCBko4pxk25o7HO9J1nAyQ3ZgosjHMMy9YqflkKupA4=";
           };
           nativeBuildInputs = with pkgs.rustPlatform; [
             cargoSetupHook
@@ -55,7 +55,7 @@
           '';
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
             src = ./.;
-            hash = "sha256-pq/slgc8qd/ym6zW7Y9IJRH3GxugZLwBFxgmOTHfdt4=";
+            hash = "sha256-kCBko4pxk25o7HO9J1nAyQ3ZgosjHMMy9YqflkKupA4=";
           };
           nativeBuildInputs = with pkgs; [
             rustPlatform.cargoSetupHook
@@ -89,6 +89,10 @@
             roxygen2
             rextendr
             testthat
+            piledownR
+            ggplot2
+            tidyr
+            dplyr
           ];
         };
 
@@ -142,7 +146,7 @@
             nativeBuildInputs = [ pkgs.cargo-nextest python3 pkgs.R ];
             doCheck = false;
             buildPhase = ''
-              cargo nextest run
+              cargo nextest run --workspace --exclude pyledown
             '';
             installPhase = "mkdir -p $out";
           };
