@@ -162,6 +162,12 @@ impl PileParams {
                     if !end.is_finite() || end < 0.0 {
                         anyhow::bail!("end must be a non-negative finite number, got {end}");
                     }
+                    if start.fract() != 0.0 {
+                        anyhow::bail!("start must be a whole number, got {start}");
+                    }
+                    if end.fract() != 0.0 {
+                        anyhow::bail!("end must be a whole number, got {end}");
+                    }
                     let strand = parse_strand(strand_str)?;
                     PileRegion::new(seq.clone(), start as u64, end as u64, name.clone(), strand)
                 })
@@ -444,5 +450,41 @@ mod tests {
         assert_eq!(parse_lib_type("isr").unwrap(), LibFragmentType::Isr);
         assert_eq!(parse_lib_type("isf").unwrap(), LibFragmentType::Isf);
         assert!(parse_lib_type("invalid").is_err());
+    }
+
+    #[test]
+    fn rejects_fractional_start() {
+        let params = PileParams {
+            seqs: Some(vec!["chr1".into()]),
+            starts: Some(vec![100.5]),
+            ends: Some(vec![200.0]),
+            region_names: Some(vec!["g1".into()]),
+            region_strands: Some(vec!["+".into()]),
+            region: None,
+            name: None,
+            strand: None,
+            regions: None,
+            regions_file: None,
+            ..make_params_single()
+        };
+        assert!(params.build_regions().is_err());
+    }
+
+    #[test]
+    fn rejects_fractional_end() {
+        let params = PileParams {
+            seqs: Some(vec!["chr1".into()]),
+            starts: Some(vec![100.0]),
+            ends: Some(vec![200.7]),
+            region_names: Some(vec!["g1".into()]),
+            region_strands: Some(vec!["+".into()]),
+            region: None,
+            name: None,
+            strand: None,
+            regions: None,
+            regions_file: None,
+            ..make_params_single()
+        };
+        assert!(params.build_regions().is_err());
     }
 }
