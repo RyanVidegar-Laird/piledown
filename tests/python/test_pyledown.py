@@ -154,3 +154,74 @@ def test_isf_differs_from_isr(test_bam):
     assert not (isr_df["up"].values == isf_df["up"].values).all() or not (
         isr_df["down"].values == isf_df["down"].values
     ).all()
+
+
+def test_zero_concurrency_raises():
+    """concurrency=0 raises ValueError on construction."""
+    with pytest.raises(ValueError, match="concurrency must be >= 1"):
+        PileParams(
+            input_bam="/dev/null",
+            lib_fragment_type=LibFragmentType.Isr,
+            region="chr1:1-100",
+            name="x",
+            strand=Strand.Forward,
+            concurrency=0,
+        )
+
+
+def test_zero_chunk_size_raises():
+    """chunk_size=0 raises ValueError on construction."""
+    with pytest.raises(ValueError, match="chunk_size must be >= 1"):
+        PileParams(
+            input_bam="/dev/null",
+            lib_fragment_type=LibFragmentType.Isr,
+            region="chr1:1-100",
+            name="x",
+            strand=Strand.Forward,
+            chunk_size=0,
+        )
+
+
+def test_no_region_source_raises():
+    """No region arguments raises ValueError on construction."""
+    with pytest.raises(ValueError, match="provide exactly one of"):
+        PileParams(
+            input_bam="/dev/null",
+            lib_fragment_type=LibFragmentType.Isr,
+        )
+
+
+def test_missing_bam_raises():
+    """Nonexistent BAM path raises ValueError on generate()."""
+    params = PileParams(
+        input_bam="/nonexistent/path.bam",
+        lib_fragment_type=LibFragmentType.Isr,
+        region="chr1:1-100",
+        name="x",
+        strand=Strand.Reverse,
+    )
+    with pytest.raises(ValueError):
+        params.generate()
+
+
+def test_missing_strand_with_region_raises():
+    """region= without strand= raises ValueError on generate()."""
+    params = PileParams(
+        input_bam="/dev/null",
+        lib_fragment_type=LibFragmentType.Isr,
+        region="chr1:1-100",
+        name="x",
+    )
+    with pytest.raises(ValueError, match="requires 'name' and 'strand'"):
+        params.generate()
+
+
+def test_regions_missing_companions_raises():
+    """regions= without names=/strands= raises ValueError on generate()."""
+    params = PileParams(
+        input_bam="/dev/null",
+        lib_fragment_type=LibFragmentType.Isr,
+        regions=["chr1:1-100"],
+    )
+    with pytest.raises(ValueError, match="requires 'names' and 'strands'"):
+        params.generate()
