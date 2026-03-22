@@ -78,6 +78,8 @@
 
         pythonEnv = python3.withPackages (ps: with ps; [
           pyarrow
+          pandas
+          pytest
           seaborn
         ]);
 
@@ -167,6 +169,23 @@
             buildPhase = ''
               cd crates/piledownR
               Rscript -e "library(piledownR); testthat::test_dir('tests/testthat', stop_on_failure = TRUE)"
+            '';
+            installPhase = "mkdir -p $out";
+          };
+
+          pyledown-integration = pkgs.stdenv.mkDerivation {
+            pname = "pyledown-integration";
+            version = "0.1.0";
+            src = pkgs.lib.cleanSource ./.;
+            nativeBuildInputs = [
+              (python3.withPackages (ps: [
+                pyledown
+                ps.pandas
+                ps.pytest
+              ]))
+            ];
+            buildPhase = ''
+              pytest tests/python/ -v
             '';
             installPhase = "mkdir -p $out";
           };
