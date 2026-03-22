@@ -158,6 +158,15 @@ mod pyledown {
                 ));
             }
 
+            if concurrency == 0 {
+                return Err(PyValueError::new_err("concurrency must be >= 1"));
+            }
+            if let Some(cs) = chunk_size {
+                if cs == 0 {
+                    return Err(PyValueError::new_err("chunk_size must be >= 1"));
+                }
+            }
+
             // Validate companions for the active group
             if region.is_some() {
                 // Path 1: reject companions from other groups

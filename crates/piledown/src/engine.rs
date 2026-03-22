@@ -173,6 +173,14 @@ mod async_engine {
 
     impl PileEngine {
         pub fn new(config: EngineConfig) -> Self {
+            assert!(
+                config.concurrency > 0,
+                "concurrency must be >= 1, got {}",
+                config.concurrency
+            );
+            if let Some(cs) = config.chunk_size {
+                assert!(cs > 0, "chunk_size must be >= 1, got {}", cs);
+            }
             Self { config }
         }
 
@@ -415,6 +423,34 @@ mod tests {
         assert_eq!(chunks[2].0.end, 109);
         assert_eq!(chunks[2].1.len(), 2);
         assert_eq!(chunks[2].1.up[1], 9); // pos 109, offset 1 within chunk
+    }
+
+    #[test]
+    #[should_panic(expected = "concurrency")]
+    fn rejects_zero_concurrency() {
+        let config = EngineConfig {
+            bam_path: "dummy.bam".into(),
+            exclude_flags: None,
+            lib_type: crate::types::LibFragmentType::Isr,
+            concurrency: 0,
+            index_path: None,
+            chunk_size: None,
+        };
+        PileEngine::new(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "chunk_size")]
+    fn rejects_zero_chunk_size() {
+        let config = EngineConfig {
+            bam_path: "dummy.bam".into(),
+            exclude_flags: None,
+            lib_type: crate::types::LibFragmentType::Isr,
+            concurrency: 1,
+            index_path: None,
+            chunk_size: Some(0),
+        };
+        PileEngine::new(config);
     }
 
     #[tokio::test]

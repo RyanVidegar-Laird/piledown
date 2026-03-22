@@ -24,6 +24,10 @@ fn main() -> Result<()> {
         "input file not found: {}",
         cli.input.display()
     );
+    anyhow::ensure!(cli.concurrency > 0, "concurrency must be >= 1");
+    if let Some(cs) = cli.chunk_size {
+        anyhow::ensure!(cs > 0, "chunk_size must be >= 1");
+    }
 
     let exclude_flags = cli.exclude.map(Flags::from);
 
