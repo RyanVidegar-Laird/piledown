@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use crate::coverage::CoverageMap;
+use crate::region::PileRegion;
 use anyhow::Result;
 use arrow::array::{
     GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Array, UInt64Builder,
 };
 use arrow::datatypes::{DataType, Field, Int8Type, Schema};
-use crate::coverage::CoverageMap;
-use crate::region::PileRegion;
 
 pub fn to_record_batch(region: PileRegion, map: CoverageMap) -> Result<RecordBatch> {
     let schema = Schema::new(vec![
@@ -411,7 +411,9 @@ mod streaming_tests {
             map.down[2] = 7;
 
             let items: Vec<Result<(PileRegion, CoverageMap)>> = vec![Ok((region, map))];
-            write_stream_as_tsv(stream::iter(items), writer).await.unwrap();
+            write_stream_as_tsv(stream::iter(items), writer)
+                .await
+                .unwrap();
         });
 
         let mut output = String::new();
