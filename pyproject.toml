@@ -8,6 +8,7 @@ dependencies = [
 
 [project.optional-dependencies]
 plot = ["seaborn"]
+test = ["pytest", "pandas"]
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
