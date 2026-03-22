@@ -393,4 +393,72 @@ mod streaming_tests {
         assert_eq!(batches[0].num_rows(), 2);
         assert_eq!(batches[1].num_rows(), 3);
     }
+
+    #[tokio::test]
+    async fn stream_tsv_output() {
+        use tokio::io::AsyncReadExt;
+
+        let (writer, mut reader) = tokio::io::duplex(8192);
+
+        let write_task = tokio::spawn(async move {
+            let region =
+                PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Reverse).unwrap();
+            let mut map = CoverageMap::new(100, 102);
+            map.up[0] = 10;
+            map.up[1] = 42;
+            map.down[2] = 7;
+
+            let items: Vec<Result<(PileRegion, CoverageMap)>> = vec![Ok((region, map))];
+            write_stream_as_tsv(stream::iter(items), writer).await.unwrap();
+        });
+
+        let mut output = String::new();
+        reader.read_to_string(&mut output).await.unwrap();
+        write_task.await.unwrap();
+
+        let lines: Vec<&str> = output.trim().lines().collect();
+        assert_eq!(lines[0], "name\tseq\tstrand\tpos\tup\tdown");
+        assert_eq!(lines.len(), 4); // header + 3 data rows
+        assert_eq!(lines[1], "test\tchr1\t-\t100\t10\t0");
+        assert_eq!(lines[2], "test\tchr1\t-\t101\t42\t0");
+        assert_eq!(lines[3], "test\tchr1\t-\t102\t0\t7");
+    }
+
+    #[tokio::test]
+    async fn stream_parquet_round_trip() {
+        use tokio::io::AsyncReadExt;
+
+        let (writer, mut reader) = tokio::io::duplex(65536);
+
+        let write_task = tokio::spawn(async move {
+            let region =
+                PileRegion::new("chr1".into(), 100, 102, "test".into(), Strand::Forward).unwrap();
+            let mut map = CoverageMap::new(100, 102);
+            map.up[0] = 99;
+            map.down[2] = 33;
+
+            let items: Vec<Result<(PileRegion, CoverageMap)>> = vec![Ok((region, map))];
+            write_stream_as_parquet(stream::iter(items), writer, None)
+                .await
+                .unwrap();
+        });
+
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).await.unwrap();
+        write_task.await.unwrap();
+
+        let bytes = bytes::Bytes::from(buf);
+        let pq_reader =
+            parquet::arrow::arrow_reader::ParquetRecordBatchReader::try_new(bytes, 1024).unwrap();
+        let batches: Vec<_> = pq_reader.into_iter().map(|b| b.unwrap()).collect();
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].num_rows(), 3);
+
+        let up_col = batches[0]
+            .column(4)
+            .as_any()
+            .downcast_ref::<arrow::array::UInt64Array>()
+            .unwrap();
+        assert_eq!(up_col.value(0), 99);
+    }
 }
