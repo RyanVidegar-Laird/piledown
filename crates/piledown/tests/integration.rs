@@ -276,3 +276,33 @@ async fn missing_bam_returns_error() {
     let result = stream.next().await.unwrap();
     assert!(result.is_err());
 }
+
+#[tokio::test]
+async fn empty_region_returns_all_zeros() {
+    let region =
+        PileRegion::new("chr1".into(), 1, 100, "empty".into(), Strand::Either).unwrap();
+
+    let config = EngineConfig {
+        bam_path: test_bam(),
+        exclude_flags: None,
+        lib_type: LibFragmentType::Isr,
+        concurrency: 1,
+        index_path: None,
+        chunk_size: None,
+    };
+
+    let engine = PileEngine::new(config);
+    let mut stream = std::pin::pin!(engine.run(vec![region]));
+    let (region, map) = stream.next().await.unwrap().unwrap();
+
+    assert_eq!(region.name, "empty");
+    assert_eq!(map.len(), 100); // positions 1..=100
+    assert!(
+        map.up.iter().all(|&v| v == 0),
+        "expected all up counts to be zero"
+    );
+    assert!(
+        map.down.iter().all(|&v| v == 0),
+        "expected all down counts to be zero"
+    );
+}
