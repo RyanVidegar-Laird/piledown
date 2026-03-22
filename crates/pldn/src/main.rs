@@ -28,6 +28,9 @@ fn main() -> Result<()> {
     if let Some(cs) = cli.chunk_size {
         anyhow::ensure!(cs > 0, "chunk_size must be >= 1");
     }
+    if cli.row_group_size == 0 {
+        anyhow::bail!("row_group_size must be >= 1");
+    }
 
     let exclude_flags = cli.exclude.map(Flags::from);
 
