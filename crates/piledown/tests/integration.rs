@@ -306,3 +306,50 @@ async fn empty_region_returns_all_zeros() {
         "expected all down counts to be zero"
     );
 }
+
+#[tokio::test]
+async fn single_region_isf_reverse_matches_golden() {
+    let region =
+        PileRegion::new("chr1".into(), 14900, 15200, "test".into(), Strand::Reverse).unwrap();
+
+    let config = EngineConfig {
+        bam_path: test_bam(),
+        exclude_flags: None,
+        lib_type: LibFragmentType::Isf,
+        concurrency: 1,
+        index_path: None,
+        chunk_size: None,
+    };
+
+    let engine = PileEngine::new(config);
+    let mut stream = std::pin::pin!(engine.run(vec![region]));
+    let (region, map) = stream.next().await.unwrap().unwrap();
+
+    let batch = to_record_batch(region, map).unwrap();
+    assert_eq!(batch.num_rows(), 301);
+
+    let golden_path = golden_dir().join("chr1_14900-15200_isf_reverse.tsv");
+    assert!(golden_path.exists(), "ISF golden fixture not found");
+
+    let golden = parse_golden(&golden_path);
+    let actual = batch_to_coverage_map(&batch);
+
+    assert_eq!(
+        golden.len(),
+        actual.len(),
+        "row count mismatch: golden={}, actual={}",
+        golden.len(),
+        actual.len()
+    );
+
+    for (pos, (g_up, g_down)) in &golden {
+        let (a_up, a_down) = actual
+            .get(pos)
+            .unwrap_or_else(|| panic!("position {pos} missing from actual output"));
+        assert_eq!(
+            (a_up, a_down),
+            (g_up, g_down),
+            "mismatch at pos {pos}: actual=({a_up},{a_down}) golden=({g_up},{g_down})"
+        );
+    }
+}
