@@ -60,7 +60,7 @@ mod tests {
                 let mut wtr = csv::WriterBuilder::new()
                     .has_headers(false)
                     .from_writer(&mut buf);
-                wtr.serialize(&variant).unwrap();
+                wtr.serialize(variant).unwrap();
                 wtr.flush().unwrap();
             }
             let csv_output = String::from_utf8(buf).unwrap();

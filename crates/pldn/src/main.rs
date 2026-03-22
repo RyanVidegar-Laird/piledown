@@ -75,16 +75,7 @@ fn main() -> Result<()> {
                 write_stream_as_arrow(stream, stdout).await
             }
             OutputFormat::Parquet => {
-                use parquet::basic::{Compression, Encoding};
-                use parquet::file::properties::WriterProperties;
-                use parquet::schema::types::ColumnPath;
-
-                let props = WriterProperties::builder()
-                    .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
-                    .set_column_encoding(ColumnPath::from("pos"), Encoding::DELTA_BINARY_PACKED)
-                    .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
-                    .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
-                    .set_compression(Compression::SNAPPY)
+                let props = piledown::output::parquet_props_builder()
                     .set_max_row_group_row_count(Some(cli.row_group_size))
                     .build();
                 let stdout = tokio::io::stdout();

@@ -5,10 +5,6 @@ use arrow::array::{
     GenericStringBuilder, RecordBatch, StringDictionaryBuilder, UInt64Array, UInt64Builder,
 };
 use arrow::datatypes::{DataType, Field, Int8Type, Schema};
-use parquet::basic::Encoding;
-use parquet::file::properties::WriterProperties;
-use parquet::schema::types::ColumnPath;
-
 use crate::coverage::CoverageMap;
 use crate::region::PileRegion;
 
@@ -51,6 +47,26 @@ pub fn to_record_batch(region: PileRegion, map: CoverageMap) -> Result<RecordBat
         ],
     )?;
     Ok(batch)
+}
+
+/// Base builder for Parquet writer properties.
+/// Uses DELTA_BINARY_PACKED for pos/up/down columns and SNAPPY compression.
+pub fn parquet_props_builder() -> parquet::file::properties::WriterPropertiesBuilder {
+    use parquet::basic::{Compression, Encoding};
+    use parquet::file::properties::WriterProperties;
+    use parquet::schema::types::ColumnPath;
+
+    WriterProperties::builder()
+        .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
+        .set_column_encoding(ColumnPath::from("pos"), Encoding::DELTA_BINARY_PACKED)
+        .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
+        .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
+        .set_compression(Compression::SNAPPY)
+}
+
+/// Default Parquet writer properties.
+pub fn default_parquet_props() -> parquet::file::properties::WriterProperties {
+    parquet_props_builder().build()
 }
 
 #[cfg(feature = "async")]
@@ -122,7 +138,7 @@ pub async fn write_stream_as_arrow(
 pub async fn write_stream_as_parquet(
     stream: impl futures::Stream<Item = Result<(PileRegion, CoverageMap)>>,
     writer: impl tokio::io::AsyncWrite + Unpin + Send,
-    props: Option<WriterProperties>,
+    props: Option<parquet::file::properties::WriterProperties>,
 ) -> Result<()> {
     use futures::StreamExt;
     use parquet::arrow::async_writer::AsyncArrowWriter;
@@ -136,15 +152,7 @@ pub async fn write_stream_as_parquet(
 
     let first_batch = to_record_batch(first.0, first.1)?;
 
-    let writer_props = props.unwrap_or_else(|| {
-        WriterProperties::builder()
-            .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
-            .set_column_encoding(ColumnPath::from("pos"), Encoding::DELTA_BINARY_PACKED)
-            .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
-            .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
-            .set_compression(parquet::basic::Compression::SNAPPY)
-            .build()
-    });
+    let writer_props = props.unwrap_or_else(default_parquet_props);
 
     let mut w = AsyncArrowWriter::try_new(writer, first_batch.schema(), Some(writer_props))?;
     w.write(&first_batch).await?;
@@ -266,13 +274,7 @@ mod tests {
 
         let batch = to_record_batch(region, map).unwrap();
 
-        let props = WriterProperties::builder()
-            .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
-            .set_column_encoding(ColumnPath::from("pos"), Encoding::DELTA_BINARY_PACKED)
-            .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
-            .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
-            .set_compression(parquet::basic::Compression::SNAPPY)
-            .build();
+        let props = default_parquet_props();
 
         let mut buf = Vec::new();
         let mut w = ArrowWriter::try_new(&mut buf, batch.schema(), Some(props)).unwrap();
