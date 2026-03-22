@@ -1,0 +1,3 @@
+seq	start	end	name	strand
+chr1	17000	25000	tes1	+
+chr1	26000	30000	tes2	-
