@@ -426,6 +426,82 @@ mod tests {
     }
 
     #[test]
+    fn chunk_coverage_size_one() {
+        use crate::coverage::CoverageMap;
+        let region = crate::region::PileRegion::new(
+            "chr1".into(),
+            100,
+            102,
+            "test".into(),
+            crate::types::Strand::Forward,
+        )
+        .unwrap();
+        let mut map = CoverageMap::new(100, 102);
+        map.up[0] = 1;
+        map.up[1] = 2;
+        map.up[2] = 3;
+
+        let chunks = chunk_coverage(region, map, 1);
+
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0].0.start, 100);
+        assert_eq!(chunks[0].0.end, 100);
+        assert_eq!(chunks[0].1.up[0], 1);
+        assert_eq!(chunks[1].0.start, 101);
+        assert_eq!(chunks[1].0.end, 101);
+        assert_eq!(chunks[1].1.up[0], 2);
+        assert_eq!(chunks[2].0.start, 102);
+        assert_eq!(chunks[2].0.end, 102);
+        assert_eq!(chunks[2].1.up[0], 3);
+    }
+
+    #[test]
+    fn chunk_coverage_size_equal_to_region() {
+        use crate::coverage::CoverageMap;
+        let region = crate::region::PileRegion::new(
+            "chr1".into(),
+            100,
+            104,
+            "test".into(),
+            crate::types::Strand::Forward,
+        )
+        .unwrap();
+        let mut map = CoverageMap::new(100, 104);
+        map.up[0] = 1;
+        map.up[4] = 5;
+
+        let chunks = chunk_coverage(region, map, 5);
+
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].0.start, 100);
+        assert_eq!(chunks[0].0.end, 104);
+        assert_eq!(chunks[0].1.len(), 5);
+        assert_eq!(chunks[0].1.up[0], 1);
+        assert_eq!(chunks[0].1.up[4], 5);
+    }
+
+    #[test]
+    fn chunk_coverage_size_larger_than_region() {
+        use crate::coverage::CoverageMap;
+        let region = crate::region::PileRegion::new(
+            "chr1".into(),
+            100,
+            102,
+            "test".into(),
+            crate::types::Strand::Forward,
+        )
+        .unwrap();
+        let map = CoverageMap::new(100, 102);
+
+        let chunks = chunk_coverage(region, map, 1000);
+
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].0.start, 100);
+        assert_eq!(chunks[0].0.end, 102);
+        assert_eq!(chunks[0].1.len(), 3);
+    }
+
+    #[test]
     #[should_panic(expected = "concurrency")]
     fn rejects_zero_concurrency() {
         let config = EngineConfig {
