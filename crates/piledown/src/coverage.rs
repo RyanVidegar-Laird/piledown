@@ -18,7 +18,7 @@ pub struct CoverageMap {
 impl CoverageMap {
     /// Create a new CoverageMap covering positions `start..=end`, all zeroed.
     pub fn new(start: u64, end: u64) -> Self {
-        debug_assert!(
+        assert!(
             start <= end,
             "CoverageMap::new called with start ({start}) > end ({end})"
         );
@@ -142,6 +142,12 @@ mod tests {
         for &v in map.up.iter() {
             assert_eq!(v, 0);
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "start")]
+    fn new_panics_when_start_greater_than_end() {
+        CoverageMap::new(200, 100);
     }
 
     #[test]
