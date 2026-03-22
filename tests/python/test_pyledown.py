@@ -103,3 +103,54 @@ def test_regions_file(test_bam, regions_file):
 
     assert table.column_names == ["name", "seq", "strand", "pos", "up", "down"]
     assert table.num_rows > 0
+
+
+def test_output_schema(test_bam):
+    """Verify Arrow schema column names and types."""
+    reader = PileParams(
+        input_bam=test_bam,
+        lib_fragment_type=LibFragmentType.Isr,
+        region="chr1:14900-15200",
+        name="schema_test",
+        strand=Strand.Reverse,
+    ).generate()
+
+    schema = reader.schema
+
+    assert schema.names == ["name", "seq", "strand", "pos", "up", "down"]
+    assert schema.field("name").type == pa.string()
+    assert schema.field("seq").type == pa.string()
+    assert isinstance(schema.field("strand").type, pa.DictionaryType)
+    assert schema.field("pos").type == pa.uint64()
+    assert schema.field("up").type == pa.uint64()
+    assert schema.field("down").type == pa.uint64()
+
+
+def test_isf_differs_from_isr(test_bam):
+    """ISF and ISR on same region produce different coverage values."""
+    kwargs = dict(
+        input_bam=test_bam,
+        region="chr1:14900-15200",
+        name="cmp",
+        strand=Strand.Reverse,
+    )
+
+    isr_df = (
+        PileParams(lib_fragment_type=LibFragmentType.Isr, **kwargs)
+        .generate()
+        .read_all()
+        .to_pandas()
+    )
+    isf_df = (
+        PileParams(lib_fragment_type=LibFragmentType.Isf, **kwargs)
+        .generate()
+        .read_all()
+        .to_pandas()
+    )
+
+    assert len(isr_df) > 0
+    assert len(isf_df) > 0
+    # At least one position should differ in up or down
+    assert not (isr_df["up"].values == isf_df["up"].values).all() or not (
+        isr_df["down"].values == isf_df["down"].values
+    ).all()
