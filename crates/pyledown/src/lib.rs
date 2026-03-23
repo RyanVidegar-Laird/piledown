@@ -266,6 +266,7 @@ mod pyledown {
                 concurrency: self.concurrency,
                 index_path: self.index_path.clone(),
                 chunk_size: self.chunk_size,
+                anchor_length: 0,
             };
 
             let engine = PileEngine::new(config);

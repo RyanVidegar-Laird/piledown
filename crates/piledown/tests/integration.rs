@@ -80,6 +80,7 @@ async fn single_region_isr_reverse_matches_golden() {
         concurrency: 1,
         index_path: None,
         chunk_size: None,
+        anchor_length: 0,
     };
 
     let engine = PileEngine::new(config);
@@ -127,6 +128,7 @@ async fn single_region_isr_forward_matches_golden() {
         concurrency: 1,
         index_path: None,
         chunk_size: None,
+        anchor_length: 0,
     };
 
     let engine = PileEngine::new(config);
@@ -168,6 +170,7 @@ async fn multi_region_validates_against_golden() {
         concurrency: 2,
         index_path: None,
         chunk_size: None,
+        anchor_length: 0,
     };
 
     let engine = PileEngine::new(config);
@@ -223,6 +226,7 @@ async fn single_region_isr_either_matches_golden() {
         concurrency: 1,
         index_path: None,
         chunk_size: None,
+        anchor_length: 0,
     };
 
     let engine = PileEngine::new(config);
@@ -269,6 +273,7 @@ async fn missing_bam_returns_error() {
         concurrency: 1,
         index_path: None,
         chunk_size: None,
+        anchor_length: 0,
     };
 
     let engine = PileEngine::new(config);
@@ -288,6 +293,7 @@ async fn empty_region_returns_all_zeros() {
         concurrency: 1,
         index_path: None,
         chunk_size: None,
+        anchor_length: 0,
     };
 
     let engine = PileEngine::new(config);
@@ -318,6 +324,7 @@ async fn single_region_isf_reverse_matches_golden() {
         concurrency: 1,
         index_path: None,
         chunk_size: None,
+        anchor_length: 0,
     };
 
     let engine = PileEngine::new(config);

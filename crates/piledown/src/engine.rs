@@ -9,7 +9,7 @@ mod async_engine {
     use noodles::sam;
     use tokio::fs::File;
 
-    use crate::cigar::cigar_spans;
+    use crate::cigar::{cigar_spans, filter_spans_by_anchor};
     use crate::coverage::CoverageMap;
     use crate::filter::{self, RecordFilter};
     use crate::region::PileRegion;
@@ -29,6 +29,8 @@ mod async_engine {
         /// Optional chunk size: if set, regions larger than this many positions
         /// are split into multiple (PileRegion, CoverageMap) pairs in the output stream.
         pub chunk_size: Option<usize>,
+        /// Global default anchor length. 0 = no filtering.
+        pub anchor_length: u64,
     }
 
     /// Async BAM reader wrapping noodles.
@@ -144,6 +146,12 @@ mod async_engine {
                     }
                 }
                 let spans = cigar_spans(alignment_start, &ops);
+                let effective_anchor = region.anchor_length.unwrap_or(0);
+                let spans = if effective_anchor > 0 {
+                    filter_spans_by_anchor(&spans, effective_anchor)
+                } else {
+                    spans
+                };
                 map.apply_spans(&spans);
             }
 
@@ -200,7 +208,10 @@ mod async_engine {
         }
 
         /// Process a single region. Opens its own BamSource (index seeks aren't shareable).
-        async fn process_one(&self, region: PileRegion) -> Result<(PileRegion, CoverageMap)> {
+        async fn process_one(&self, mut region: PileRegion) -> Result<(PileRegion, CoverageMap)> {
+            // Resolve per-region anchor: use region-specific if set, else global default
+            region.anchor_length = Some(region.anchor_length.unwrap_or(self.config.anchor_length));
+
             let mut source =
                 BamSource::open(&self.config.bam_path, self.config.index_path.as_deref()).await?;
             let filters = self.build_filters();
@@ -324,6 +335,7 @@ mod tests {
             concurrency: 1,
             index_path: None,
             chunk_size: None,
+            anchor_length: 0,
         };
         let engine = PileEngine::new(config);
         let filters = engine.build_filters();
@@ -339,6 +351,7 @@ mod tests {
             concurrency: 1,
             index_path: None,
             chunk_size: None,
+            anchor_length: 0,
         };
         let engine = PileEngine::new(config);
         let filters = engine.build_filters();
@@ -356,6 +369,7 @@ mod tests {
             concurrency: 1,
             index_path: None,
             chunk_size: None,
+            anchor_length: 0,
         };
         let engine = PileEngine::new(config);
         let classifier = engine.build_classifier();
@@ -376,6 +390,7 @@ mod tests {
             concurrency: 1,
             index_path: None,
             chunk_size: None,
+            anchor_length: 0,
         };
         let engine = PileEngine::new(config);
         let classifier = engine.build_classifier();
@@ -512,6 +527,7 @@ mod tests {
             concurrency: 0,
             index_path: None,
             chunk_size: None,
+            anchor_length: 0,
         };
         PileEngine::new(config);
     }
@@ -526,6 +542,7 @@ mod tests {
             concurrency: 1,
             index_path: None,
             chunk_size: Some(0),
+            anchor_length: 0,
         };
         PileEngine::new(config);
     }
@@ -541,6 +558,7 @@ mod tests {
             concurrency: 1,
             index_path: None,
             chunk_size: None,
+            anchor_length: 0,
         };
         let engine = PileEngine::new(config);
         let mut stream = std::pin::pin!(engine.run(vec![]));

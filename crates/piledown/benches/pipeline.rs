@@ -23,6 +23,7 @@ fn bench_full_pipeline(c: &mut Criterion) {
                 concurrency: 1,
                 index_path: None,
                 chunk_size: None,
+                anchor_length: 0,
             };
             let engine = PileEngine::new(config);
             rt.block_on(async {
