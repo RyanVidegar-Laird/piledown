@@ -163,7 +163,7 @@
             src = pkgs.lib.cleanSource ./.;
             nativeBuildInputs = [
               (pkgs.rWrapper.override {
-                packages = [ piledownR pkgs.rPackages.testthat pkgs.rPackages.arrow pkgs.rPackages.nanoarrow ];
+                packages = [ piledownR pkgs.rPackages.testthat pkgs.rPackages.arrow pkgs.rPackages.nanoarrow pkgs.rPackages.tibble ];
               })
             ];
             buildPhase = ''
