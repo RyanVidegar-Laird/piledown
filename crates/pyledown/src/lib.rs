@@ -39,8 +39,10 @@ mod pyledown {
         let end_col: Vec<u64> = df.get_item("end")?.extract()?;
         let name_col: Vec<String> = df.get_item("name")?.extract()?;
         let strand_col: Vec<String> = df.get_item("strand")?.extract()?;
-        let anchor_col: Option<Vec<u64>> =
-            df.get_item("anchor").ok().and_then(|col| col.extract().ok());
+        let anchor_col: Option<Vec<u64>> = df
+            .get_item("anchor")
+            .ok()
+            .and_then(|col| col.extract().ok());
 
         let mut regions = Vec::with_capacity(seq_col.len());
         for i in 0..seq_col.len() {
