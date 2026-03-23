@@ -39,11 +39,13 @@ mod pyledown {
         let end_col: Vec<u64> = df.get_item("end")?.extract()?;
         let name_col: Vec<String> = df.get_item("name")?.extract()?;
         let strand_col: Vec<String> = df.get_item("strand")?.extract()?;
+        let anchor_col: Option<Vec<u64>> =
+            df.get_item("anchor").ok().and_then(|col| col.extract().ok());
 
         let mut regions = Vec::with_capacity(seq_col.len());
         for i in 0..seq_col.len() {
             let strand = parse_strand_py(&strand_col[i])?;
-            let pr = PileRegion::new(
+            let mut pr = PileRegion::new(
                 seq_col[i].clone(),
                 start_col[i],
                 end_col[i],
@@ -51,6 +53,9 @@ mod pyledown {
                 strand,
             )
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            if let Some(ref anchors) = anchor_col {
+                pr.anchor_length = Some(anchors[i]);
+            }
             regions.push(pr);
         }
         Ok(regions)
@@ -99,6 +104,10 @@ mod pyledown {
         pub concurrency: usize,
         #[pyo3(get)]
         pub chunk_size: Option<usize>,
+        #[pyo3(get)]
+        pub anchor_length: u64,
+        #[pyo3(get)]
+        pub anchor_lengths: Option<Vec<u64>>,
     }
 
     #[pymethods]
@@ -122,6 +131,8 @@ mod pyledown {
             index_path=None,
             concurrency=4,
             chunk_size=None,
+            anchor_length=0,
+            anchor_lengths=None,
         ))]
         #[allow(clippy::too_many_arguments)]
         fn new(
@@ -142,6 +153,8 @@ mod pyledown {
             index_path: Option<std::path::PathBuf>,
             concurrency: usize,
             chunk_size: Option<usize>,
+            anchor_length: u64,
+            anchor_lengths: Option<Vec<u64>>,
         ) -> PyResult<Self> {
             // Check exactly one group key is present
             let sources = [
@@ -241,6 +254,8 @@ mod pyledown {
                 index_path,
                 concurrency,
                 chunk_size,
+                anchor_length,
+                anchor_lengths,
             })
         }
 
@@ -266,7 +281,7 @@ mod pyledown {
                 concurrency: self.concurrency,
                 index_path: self.index_path.clone(),
                 chunk_size: self.chunk_size,
-                anchor_length: 0,
+                anchor_length: self.anchor_length,
             };
 
             let engine = PileEngine::new(config);
@@ -304,7 +319,7 @@ mod pyledown {
 
     impl PileParams {
         pub(crate) fn build_regions(&self) -> PyResult<Vec<PileRegion>> {
-            if let Some(region_str) = &self.region {
+            let mut regions = if let Some(region_str) = &self.region {
                 // Path 1: single region
                 let name = self.name.as_deref().ok_or_else(|| {
                     PyValueError::new_err("'region' requires 'name' and 'strand'")
@@ -397,8 +412,23 @@ mod pyledown {
                 piledown::region::read_regions_tsv(file)
                     .map_err(|e| PyValueError::new_err(e.to_string()))
             } else {
-                Err(PyValueError::new_err("no region source configured"))
+                return Err(PyValueError::new_err("no region source configured"));
+            }?;
+
+            // Apply per-region anchor lengths if provided
+            if let Some(anchors) = &self.anchor_lengths {
+                if anchors.len() != regions.len() {
+                    return Err(PyValueError::new_err(format!(
+                        "'anchor_lengths' ({}) must match region count ({})",
+                        anchors.len(),
+                        regions.len()
+                    )));
+                }
+                for (region, &anchor) in regions.iter_mut().zip(anchors.iter()) {
+                    region.anchor_length = Some(anchor);
+                }
             }
+            Ok(regions)
         }
     }
 
@@ -439,6 +469,8 @@ mod tests {
             index_path: None,
             concurrency: 4,
             chunk_size: None,
+            anchor_length: 0,
+            anchor_lengths: None,
         }
     }
 
