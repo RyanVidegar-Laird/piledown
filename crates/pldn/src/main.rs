@@ -59,7 +59,7 @@ fn main() -> Result<()> {
         concurrency: cli.concurrency,
         index_path: cli.bam_index,
         chunk_size: cli.chunk_size,
-        anchor_length: 0,
+        anchor_length: cli.anchor_length,
     };
 
     let engine = PileEngine::new(config);

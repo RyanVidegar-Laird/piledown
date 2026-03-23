@@ -47,6 +47,10 @@ pub struct Cli {
     #[arg(long, default_value_t = 1_000_000)]
     pub row_group_size: usize,
 
+    /// Minimum matched bases flanking a junction for coverage to count (default: 0, no filtering)
+    #[arg(long, default_value_t = 0)]
+    pub anchor_length: u64,
+
     /// Max concurrent region queries
     #[arg(long, default_value_t = 4)]
     pub concurrency: usize,
