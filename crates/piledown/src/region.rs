@@ -11,6 +11,8 @@ pub struct PileRegion {
     pub end: u64,
     pub name: String,
     pub strand: Strand,
+    #[serde(default, alias = "anchor")]
+    pub anchor_length: Option<u64>,
 }
 
 impl PileRegion {
@@ -24,6 +26,7 @@ impl PileRegion {
             end,
             name,
             strand,
+            anchor_length: None,
         })
     }
 
@@ -90,6 +93,7 @@ mod tests {
             end: 2000,
             name: "test".into(),
             strand: Strand::Forward,
+            anchor_length: None,
         };
         let region: Region = pr.try_into().unwrap();
         assert_eq!(
@@ -192,5 +196,30 @@ mod tests {
     fn read_regions_tsv_wrong_type() {
         let tsv = "seq\tstart\tend\tname\tstrand\nchr1\tabc\t200\ttest\t+\n";
         assert!(read_regions_tsv(tsv.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn read_regions_tsv_with_anchor_column() {
+        let tsv = "seq\tstart\tend\tname\tstrand\tanchor\nchr1\t1000\t1000\tjunc1\t+\t5\nchr1\t2000\t2000\tjunc2\t+\t8\n";
+        let regions = read_regions_tsv(tsv.as_bytes()).unwrap();
+        assert_eq!(regions.len(), 2);
+        assert_eq!(regions[0].anchor_length, Some(5));
+        assert_eq!(regions[1].anchor_length, Some(8));
+    }
+
+    #[test]
+    fn read_regions_tsv_without_anchor_column() {
+        let tsv = "seq\tstart\tend\tname\tstrand\nchr1\t17000\t25000\ttes1\t+\nchr1\t26000\t30000\ttes2\t-\n";
+        let regions = read_regions_tsv(tsv.as_bytes()).unwrap();
+        assert_eq!(regions.len(), 2);
+        assert_eq!(regions[0].anchor_length, None);
+        assert_eq!(regions[1].anchor_length, None);
+    }
+
+    #[test]
+    fn read_regions_tsv_anchor_explicit_zero() {
+        let tsv = "seq\tstart\tend\tname\tstrand\tanchor\nchr1\t5000\t6000\texon1\t+\t0\n";
+        let regions = read_regions_tsv(tsv.as_bytes()).unwrap();
+        assert_eq!(regions[0].anchor_length, Some(0));
     }
 }

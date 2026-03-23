@@ -278,6 +278,7 @@ mod async_engine {
                 end: chunk_end,
                 name: region.name.clone(),
                 strand: region.strand,
+                anchor_length: region.anchor_length,
             };
 
             chunks.push((chunk_region, chunk_map));
