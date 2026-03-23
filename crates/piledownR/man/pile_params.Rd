@@ -21,7 +21,8 @@ pile_params(
   exclude_flags = NULL,
   index_path = NULL,
   concurrency = NULL,
-  chunk_size = NULL
+  chunk_size = NULL,
+  anchor_length = NULL
 )
 }
 \arguments{
@@ -58,6 +59,8 @@ pile_params(
 \item{concurrency}{Number of concurrent region processors (default 4).}
 
 \item{chunk_size}{Optional chunk size for splitting large regions.}
+
+\item{anchor_length}{Minimum matched bases flanking a junction (default NULL = 0, no filtering).}
 }
 \value{
 A PileParams object.

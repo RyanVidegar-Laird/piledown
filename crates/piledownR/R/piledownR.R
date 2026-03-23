@@ -24,6 +24,7 @@ NULL
 #' @param index_path Optional explicit path to BAM index (.bai).
 #' @param concurrency Number of concurrent region processors (default 4).
 #' @param chunk_size Optional chunk size for splitting large regions.
+#' @param anchor_length Minimum matched bases flanking a junction (default NULL = 0, no filtering).
 #' @return A PileParams object.
 #' @export
 pile_params <- function(
@@ -34,7 +35,8 @@ pile_params <- function(
     seqs = NULL, starts = NULL, ends = NULL,
     regions_df = NULL, regions_file = NULL,
     exclude_flags = NULL, index_path = NULL,
-    concurrency = NULL, chunk_size = NULL) {
+    concurrency = NULL, chunk_size = NULL,
+    anchor_length = NULL) {
 
   # Phase 1: detect active group
   groups <- c(
@@ -61,7 +63,8 @@ pile_params <- function(
       seqs = NULL, starts = NULL, ends = NULL,
       regions_file = NULL,
       exclude_flags = exclude_flags, index_path = index_path,
-      concurrency = concurrency, chunk_size = chunk_size
+      concurrency = concurrency, chunk_size = chunk_size,
+      anchor_length = anchor_length
     )
   } else if (groups["regions"]) {
     if (is.null(names) || is.null(strands)) {
@@ -80,7 +83,8 @@ pile_params <- function(
       seqs = NULL, starts = NULL, ends = NULL,
       regions_file = NULL,
       exclude_flags = exclude_flags, index_path = index_path,
-      concurrency = concurrency, chunk_size = chunk_size
+      concurrency = concurrency, chunk_size = chunk_size,
+      anchor_length = anchor_length
     )
   } else if (groups["seqs"]) {
     if (is.null(starts) || is.null(ends) || is.null(names) || is.null(strands)) {
@@ -100,7 +104,8 @@ pile_params <- function(
       seqs = seqs, starts = as.numeric(starts), ends = as.numeric(ends),
       regions_file = NULL,
       exclude_flags = exclude_flags, index_path = index_path,
-      concurrency = concurrency, chunk_size = chunk_size
+      concurrency = concurrency, chunk_size = chunk_size,
+      anchor_length = anchor_length
     )
   } else if (groups["regions_df"]) {
     if (!is.data.frame(regions_df)) {
@@ -124,7 +129,8 @@ pile_params <- function(
       ends = as.numeric(regions_df$end),
       regions_file = NULL,
       exclude_flags = exclude_flags, index_path = index_path,
-      concurrency = concurrency, chunk_size = chunk_size
+      concurrency = concurrency, chunk_size = chunk_size,
+      anchor_length = anchor_length
     )
   } else if (groups["regions_file"]) {
     PileParams$new(
@@ -134,7 +140,8 @@ pile_params <- function(
       seqs = NULL, starts = NULL, ends = NULL,
       regions_file = regions_file,
       exclude_flags = exclude_flags, index_path = index_path,
-      concurrency = concurrency, chunk_size = chunk_size
+      concurrency = concurrency, chunk_size = chunk_size,
+      anchor_length = anchor_length
     )
   }
 }

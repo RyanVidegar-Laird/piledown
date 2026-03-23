@@ -12,7 +12,7 @@ NULL
 
 PileParams <- new.env(parent = emptyenv())
 
-PileParams$new <- function(input_bam, lib_fragment_type, region, name, strand, regions, region_names, region_strands, seqs, starts, ends, regions_file, exclude_flags, index_path, concurrency, chunk_size) .Call(wrap__PileParams__new, input_bam, lib_fragment_type, region, name, strand, regions, region_names, region_strands, seqs, starts, ends, regions_file, exclude_flags, index_path, concurrency, chunk_size)
+PileParams$new <- function(input_bam, lib_fragment_type, region, name, strand, regions, region_names, region_strands, seqs, starts, ends, regions_file, exclude_flags, index_path, concurrency, chunk_size, anchor_length) .Call(wrap__PileParams__new, input_bam, lib_fragment_type, region, name, strand, regions, region_names, region_strands, seqs, starts, ends, regions_file, exclude_flags, index_path, concurrency, chunk_size, anchor_length)
 
 PileParams$generate_stream <- function() .Call(wrap__PileParams__generate_stream, self)
 

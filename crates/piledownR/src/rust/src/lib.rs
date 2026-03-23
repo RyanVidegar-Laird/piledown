@@ -80,6 +80,7 @@ pub struct PileParams {
     index_path: Option<PathBuf>,
     concurrency: usize,
     chunk_size: Option<usize>,
+    anchor_length: u64,
 }
 
 impl PileParams {
@@ -193,7 +194,7 @@ impl PileParams {
             concurrency: self.concurrency,
             index_path: self.index_path.clone(),
             chunk_size: self.chunk_size,
-            anchor_length: 0,
+            anchor_length: self.anchor_length,
         };
 
         let engine = PileEngine::new(config);
@@ -236,6 +237,7 @@ impl PileParams {
     /// @param index_path Optional explicit path to BAM index (.bai).
     /// @param concurrency Number of concurrent region processors (default 4).
     /// @param chunk_size Optional chunk size for splitting large regions.
+    /// @param anchor_length Minimum matched bases flanking a junction (default NULL = 0, no filtering).
     /// @export
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -255,6 +257,7 @@ impl PileParams {
         index_path: Option<&str>,
         concurrency: Option<i32>,
         chunk_size: Option<i32>,
+        anchor_length: Option<i32>,
     ) -> Self {
         let lib_fragment_type = parse_lib_type(lib_fragment_type).unwrap_or_else(|e| panic!("{e}"));
         let parsed_strand = strand.map(|s| parse_strand(s).unwrap_or_else(|e| panic!("{e}")));
@@ -288,6 +291,11 @@ impl PileParams {
             Some(c) => Some(c as usize),
             None => None,
         };
+        let anchor_length_val = match anchor_length {
+            Some(a) if a < 0 => panic!("anchor_length must be >= 0"),
+            Some(a) => a as u64,
+            None => 0,
+        };
 
         PileParams {
             input_bam: PathBuf::from(input_bam),
@@ -306,6 +314,7 @@ impl PileParams {
             index_path: index_path.map(PathBuf::from),
             concurrency: concurrency_val as usize,
             chunk_size: chunk_size_val,
+            anchor_length: anchor_length_val,
         }
     }
 
@@ -347,6 +356,7 @@ mod tests {
             index_path: None,
             concurrency: 4,
             chunk_size: None,
+            anchor_length: 0,
         }
     }
 
