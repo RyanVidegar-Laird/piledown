@@ -35,6 +35,17 @@
           doCheck = false; # tests run separately in checks
         };
 
+        # Static CLI binary for release artifacts
+        pldn-static = pkgs.pkgsStatic.rustPlatform.buildRustPackage {
+          pname = "pldn";
+          version = "0.1.0";
+          src = ./.;
+          cargoLock.lockFile = ./Cargo.lock;
+          cargoBuildFlags = [ "-p" "pldn" ];
+          nativeBuildInputs = [ python3 pkgs.R ];
+          doCheck = false;
+        };
+
         # Python package
         python3 = pkgs.python3;
         pyledown = python3.pkgs.buildPythonPackage {
@@ -216,7 +227,7 @@
 
         packages = {
           default = pldn;
-          inherit pldn pyledown piledownR;
+          inherit pldn pldn-static pyledown piledownR;
         };
 
         devShells.default = pkgs.mkShell {

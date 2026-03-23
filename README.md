@@ -27,13 +27,15 @@ Other features:
 
 ## Installation
 
-Piledown is distributed as a Nix flake. Add it to your `flake.nix`:
+Statically linked `pldn` binaries are available on the [releases page](https://github.com/RyanVidegar-Laird/piledown/releases). The Python and R bindings are available via the Nix flake.
+
+Add Piledown to your `flake.nix`:
 
 ```nix
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/25.11";
-    piledown.url = "github:hydrangea/piledown";
+    piledown.url = "github:RyanVidegar-Laird/piledown";
     piledown.inputs.nixpkgs.follows = "nixpkgs";
   };
 

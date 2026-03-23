@@ -27,8 +27,8 @@ jobs:
             exit 1
           fi
 
-      - name: Build CLI
-        run: nix build .#pldn -o pldn-result
+      - name: Build static CLI
+        run: nix build .#pldn-static -o pldn-result
 
       - name: Prepare artifacts
         run: |
