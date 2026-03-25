@@ -153,9 +153,13 @@ Required columns: `seq`, `start`, `end`, `name`, `strand`. An optional `anchor` 
 
 ### Anchor length
 
-`anchor_length` filters out reads where fewer than N bases are matched on either side of a splice. This removes low-confidence junction evidence from both `up` and `down` counts. Defaults to 0 (no filtering). Can also be set per-region via the `anchor` column in a regions file.
+`anchor_length` filters out reads where fewer than N bases are matched on either side of a splice junction. Defaults to 0 (no filtering). Can also be set per-region via the `anchor` column in a regions/junctions file.
 
-Piledown does not identify junctions -- it only counts matches and skips per position. To get anchor-filtered counts at a specific junction, pass a 1 bp region at the junction position.
+For **junction counting** (`pldn junctions`), this excludes reads whose flanking match blocks are shorter than the anchor threshold from the junction count.
+
+For **coverage** (`pldn coverage`), this removes low-confidence junction evidence from both `up` and `down` counts at every position in the region.
+  - Note: this will bias depth near start/stop points in genes/transcripts. I imagine there may be some utility in filtering coverage in this sense, though the functionality primarily exists for junction counting.
+
 
 ### Batch regions to Parquet, then query with DuckDB
 
