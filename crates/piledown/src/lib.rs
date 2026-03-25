@@ -1,4 +1,5 @@
 pub mod cigar;
+pub mod junction;
 pub mod coverage;
 pub mod engine;
 pub mod filter;
