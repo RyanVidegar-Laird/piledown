@@ -477,7 +477,8 @@ mod tests {
     #[test]
     fn junction_record_batch_schema() {
         use crate::junction::JunctionRegion;
-        let jr = JunctionRegion::new("chr1".into(), 100, 500, "j1".into(), Strand::Forward).unwrap();
+        let jr =
+            JunctionRegion::new("chr1".into(), 100, 500, "j1".into(), Strand::Forward).unwrap();
         let batch = junction_to_record_batch(jr, 42).unwrap();
         let schema = batch.schema();
         assert_eq!(schema.fields().len(), 6);
@@ -492,20 +493,30 @@ mod tests {
     #[test]
     fn junction_record_batch_values() {
         use crate::junction::JunctionRegion;
-        let jr = JunctionRegion::new("chr1".into(), 100, 500, "j1".into(), Strand::Reverse).unwrap();
+        let jr =
+            JunctionRegion::new("chr1".into(), 100, 500, "j1".into(), Strand::Reverse).unwrap();
         let batch = junction_to_record_batch(jr, 42).unwrap();
         assert_eq!(batch.num_rows(), 1);
 
-        let count_col = batch.column(5).as_any()
-            .downcast_ref::<arrow::array::UInt64Array>().unwrap();
+        let count_col = batch
+            .column(5)
+            .as_any()
+            .downcast_ref::<arrow::array::UInt64Array>()
+            .unwrap();
         assert_eq!(count_col.value(0), 42);
 
-        let start_col = batch.column(3).as_any()
-            .downcast_ref::<arrow::array::UInt64Array>().unwrap();
+        let start_col = batch
+            .column(3)
+            .as_any()
+            .downcast_ref::<arrow::array::UInt64Array>()
+            .unwrap();
         assert_eq!(start_col.value(0), 100);
 
-        let end_col = batch.column(4).as_any()
-            .downcast_ref::<arrow::array::UInt64Array>().unwrap();
+        let end_col = batch
+            .column(4)
+            .as_any()
+            .downcast_ref::<arrow::array::UInt64Array>()
+            .unwrap();
         assert_eq!(end_col.value(0), 500);
     }
 }
@@ -639,9 +650,12 @@ mod streaming_tests {
         let (writer, mut reader) = tokio::io::duplex(8192);
 
         let write_task = tokio::spawn(async move {
-            let jr = JunctionRegion::new("chr1".into(), 100, 500, "junc1".into(), Strand::Forward).unwrap();
+            let jr = JunctionRegion::new("chr1".into(), 100, 500, "junc1".into(), Strand::Forward)
+                .unwrap();
             let items: Vec<Result<(JunctionRegion, u64)>> = vec![Ok((jr, 42))];
-            write_junction_stream_as_tsv(stream::iter(items), writer).await.unwrap();
+            write_junction_stream_as_tsv(stream::iter(items), writer)
+                .await
+                .unwrap();
         });
 
         let mut output = String::new();

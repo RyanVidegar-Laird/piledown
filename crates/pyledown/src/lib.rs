@@ -649,7 +649,11 @@ mod pyledown {
                     PyValueError::new_err("'seqs' requires 'starts', 'ends', 'names', 'strands'")
                 })?;
                 let len = seqs.len();
-                if starts.len() != len || ends.len() != len || names.len() != len || strands.len() != len {
+                if starts.len() != len
+                    || ends.len() != len
+                    || names.len() != len
+                    || strands.len() != len
+                {
                     return Err(PyValueError::new_err("all vectors must be same length"));
                 }
                 seqs.iter()
@@ -665,10 +669,9 @@ mod pyledown {
             } else if let Some(df_junctions) = &self.junctions_df {
                 df_junctions.clone()
             } else if let Some(path) = &self.junctions_file {
-                let file = std::fs::File::open(path)
-                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                read_junctions_tsv(file)
-                    .map_err(|e| PyValueError::new_err(e.to_string()))?
+                let file =
+                    std::fs::File::open(path).map_err(|e| PyValueError::new_err(e.to_string()))?;
+                read_junctions_tsv(file).map_err(|e| PyValueError::new_err(e.to_string()))?
             } else {
                 return Err(PyValueError::new_err("no junction source configured"));
             };

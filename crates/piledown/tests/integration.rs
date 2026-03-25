@@ -440,11 +440,8 @@ async fn junction_strand_filtering() {
 
     let engine = JunctionEngine::new(junction_config());
     let results: Vec<_> = {
-        let stream = std::pin::pin!(engine.run(vec![
-            junction_either,
-            junction_forward,
-            junction_reverse
-        ]));
+        let stream =
+            std::pin::pin!(engine.run(vec![junction_either, junction_forward, junction_reverse]));
         stream
             .collect::<Vec<_>>()
             .await
@@ -539,8 +536,7 @@ async fn junction_with_anchor_filter() {
 
     let engine = JunctionEngine::new(junction_config());
     let results: Vec<_> = {
-        let stream =
-            std::pin::pin!(engine.run(vec![junction_no_anchor, junction_with_anchor]));
+        let stream = std::pin::pin!(engine.run(vec![junction_no_anchor, junction_with_anchor]));
         stream
             .collect::<Vec<_>>()
             .await

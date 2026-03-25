@@ -1,8 +1,8 @@
 pub mod cigar;
-pub mod junction;
 pub mod coverage;
 pub mod engine;
 pub mod filter;
+pub mod junction;
 pub mod output;
 pub mod region;
 pub mod strand;

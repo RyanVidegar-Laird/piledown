@@ -385,10 +385,7 @@ mod async_engine {
             }
         }
 
-        async fn process_one(
-            &self,
-            mut junction: JunctionRegion,
-        ) -> Result<(JunctionRegion, u64)> {
+        async fn process_one(&self, mut junction: JunctionRegion) -> Result<(JunctionRegion, u64)> {
             junction.anchor_length =
                 Some(junction.anchor_length.unwrap_or(self.config.anchor_length));
 

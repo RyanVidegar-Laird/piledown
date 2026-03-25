@@ -8,9 +8,8 @@ use noodles::sam::alignment::record::Flags;
 use piledown::engine::{runtime, EngineConfig, JunctionEngine, PileEngine};
 use piledown::junction::{read_junctions_tsv, JunctionRegion};
 use piledown::output::{
-    write_junction_stream_as_arrow, write_junction_stream_as_parquet,
-    write_junction_stream_as_tsv, write_stream_as_arrow, write_stream_as_parquet,
-    write_stream_as_tsv,
+    write_junction_stream_as_arrow, write_junction_stream_as_parquet, write_junction_stream_as_tsv,
+    write_stream_as_arrow, write_stream_as_parquet, write_stream_as_tsv,
 };
 use piledown::region::{read_regions_tsv, PileRegion};
 use piledown::types::OutputFormat;

@@ -351,7 +351,9 @@ impl JunctionParams {
     fn build_junctions(&self) -> Result<Vec<JunctionRegion>> {
         if let Some(seqs) = &self.seqs {
             let starts = self.starts.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("'seqs' requires 'starts', 'ends', 'region_names', 'region_strands'")
+                anyhow::anyhow!(
+                    "'seqs' requires 'starts', 'ends', 'region_names', 'region_strands'"
+                )
             })?;
             let ends = self
                 .ends
@@ -509,9 +511,7 @@ impl JunctionParams {
     /// name, seq, strand, start, end, count.
     /// @export
     fn generate_stream(&self) -> extendr_api::Result<Robj> {
-        let batches = self
-            .run_engine()
-            .map_err(|e| Error::Other(e.to_string()))?;
+        let batches = self.run_engine().map_err(|e| Error::Other(e.to_string()))?;
         export_batches_to_r(batches)
     }
 }

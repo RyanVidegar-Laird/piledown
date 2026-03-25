@@ -18,9 +18,7 @@ pub struct JunctionRegion {
 impl JunctionRegion {
     pub fn new(seq: String, start: u64, end: u64, name: String, strand: Strand) -> Result<Self> {
         if start >= end {
-            return Err(anyhow!(
-                "junction start ({start}) must be < end ({end})"
-            ));
+            return Err(anyhow!("junction start ({start}) must be < end ({end})"));
         }
         Ok(Self {
             seq,
@@ -90,8 +88,7 @@ mod tests {
 
     #[test]
     fn to_noodles_region() {
-        let jr =
-            JunctionRegion::new("chr1".into(), 100, 500, "j".into(), Strand::Forward).unwrap();
+        let jr = JunctionRegion::new("chr1".into(), 100, 500, "j".into(), Strand::Forward).unwrap();
         let region: Region = jr.try_into().unwrap();
         assert_eq!(
             <[u8] as AsRef<[u8]>>::as_ref(region.name().as_ref()),
@@ -101,7 +98,8 @@ mod tests {
 
     #[test]
     fn read_junctions_tsv_basic() {
-        let tsv = "seq\tstart\tend\tname\tstrand\nchr1\t100\t500\tjunc1\t+\nchr1\t2000\t3000\tjunc2\t-\n";
+        let tsv =
+            "seq\tstart\tend\tname\tstrand\nchr1\t100\t500\tjunc1\t+\nchr1\t2000\t3000\tjunc2\t-\n";
         let junctions = super::read_junctions_tsv(tsv.as_bytes()).unwrap();
         assert_eq!(junctions.len(), 2);
         assert_eq!(junctions[0].name, "junc1");
@@ -116,8 +114,7 @@ mod tests {
 
     #[test]
     fn read_junctions_tsv_with_anchor() {
-        let tsv =
-            "seq\tstart\tend\tname\tstrand\tanchor\nchr1\t100\t500\tjunc1\t+\t8\n";
+        let tsv = "seq\tstart\tend\tname\tstrand\tanchor\nchr1\t100\t500\tjunc1\t+\t8\n";
         let junctions = super::read_junctions_tsv(tsv.as_bytes()).unwrap();
         assert_eq!(junctions[0].anchor_length, Some(8));
     }
