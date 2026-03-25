@@ -46,6 +46,6 @@ jp <- junction_params(
   region_strands = c("+", "-")
 )
 
-junc_reader <- generate_stream(jp)
+junc_reader <- generate(jp)
 junc_df <- as_tibble(junc_reader$read_table())
 print(junc_df)

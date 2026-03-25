@@ -146,13 +146,14 @@ pile_params <- function(
   }
 }
 
-#' Generate per-base coverage for configured regions.
+#' Generate results from a PileParams or JunctionParams object.
 #'
-#' Runs the piledown engine on the BAM file and regions configured in the
-#' given PileParams object. Returns an Arrow RecordBatchReader with columns:
+#' For PileParams, returns an Arrow RecordBatchReader with columns:
 #' name, seq, strand, pos, up, down.
+#' For JunctionParams, returns an Arrow RecordBatchReader with columns:
+#' name, seq, strand, start, end, count.
 #'
-#' @param params A PileParams object created via \code{pile_params()}.
+#' @param params A PileParams or JunctionParams object.
 #' @return An \code{arrow::RecordBatchReader}.
 #' @export
 generate <- function(params) {
@@ -253,16 +254,3 @@ junction_params <- function(
   }
 }
 
-#' Count reads matching each junction.
-#'
-#' Runs the junction engine on the BAM file and junctions configured in the
-#' given JunctionParams object. Returns an Arrow RecordBatchReader with columns:
-#' name, seq, strand, start, end, count.
-#'
-#' @param params A JunctionParams object created via \code{junction_params()}.
-#' @return An \code{arrow::RecordBatchReader}.
-#' @export
-generate_stream <- function(params) {
-  stream <- params$generate_stream()
-  arrow::as_record_batch_reader(stream)
-}

@@ -263,7 +263,7 @@ params <- junction_params(
   strands = c("+", "-")
 )
 
-reader <- generate_stream(params)  # returns arrow::RecordBatchReader
+reader <- generate(params)  # returns arrow::RecordBatchReader
 df <- as_tibble(reader$read_table())
 print(df)
 ```
