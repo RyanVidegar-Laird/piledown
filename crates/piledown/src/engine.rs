@@ -9,9 +9,10 @@ mod async_engine {
     use noodles::sam;
     use tokio::fs::File;
 
-    use crate::cigar::{cigar_spans, filter_spans_by_anchor};
+    use crate::cigar::{cigar_spans, filter_spans_by_anchor, junction_matches};
     use crate::coverage::CoverageMap;
     use crate::filter::{self, RecordFilter};
+    use crate::junction::JunctionRegion;
     use crate::region::PileRegion;
     use crate::strand::StrandClassifier;
     use crate::types::Strand;
@@ -253,6 +254,163 @@ mod async_engine {
                             as std::pin::Pin<Box<dyn futures::Stream<Item = Result<_>> + Send>>
                     }
                 })
+        }
+    }
+
+    impl BamSource {
+        /// Query a region and count reads with exact junction matches.
+        async fn process_junction(
+            &mut self,
+            junction: &JunctionRegion,
+            filters: &[Box<dyn RecordFilter>],
+            classifier: &dyn StrandClassifier,
+        ) -> Result<u64> {
+            let noodle_region: noodles::core::Region = junction.clone().try_into()?;
+
+            let query = self
+                .reader
+                .query(&self.header, &self.index, &noodle_region)?;
+
+            let effective_anchor = junction.anchor_length.unwrap_or(0);
+            let mut count: u64 = 0;
+            let mut cigar_error_count: u64 = 0;
+            let mut strand_skip_count: u64 = 0;
+
+            let mut records = std::pin::pin!(query.records());
+            while let Some(record) = records.try_next().await? {
+                let flags = record.flags();
+                if !filter::apply_filters(flags, filters) {
+                    continue;
+                }
+
+                if junction.strand != Strand::Either {
+                    match classifier.classify(flags) {
+                        Ok(s) if s == junction.strand => {}
+                        Ok(_) => continue,
+                        Err(e) => {
+                            if strand_skip_count == 0 {
+                                log::warn!(
+                                    "strand classification failed in junction {} at alignment position {:?}: {}",
+                                    junction.name,
+                                    record.alignment_start(),
+                                    e
+                                );
+                            }
+                            strand_skip_count += 1;
+                            continue;
+                        }
+                    }
+                }
+
+                let alignment_start = match record.alignment_start() {
+                    Some(Ok(pos)) => pos.get() as u64,
+                    _ => continue,
+                };
+
+                let mut ops = Vec::new();
+                for op_result in record.cigar().iter() {
+                    match op_result {
+                        Ok(op) => ops.push(op),
+                        Err(e) => {
+                            if cigar_error_count == 0 {
+                                log::warn!(
+                                    "CIGAR parse error in junction {} at alignment position {}: {}",
+                                    junction.name,
+                                    alignment_start,
+                                    e
+                                );
+                            }
+                            cigar_error_count += 1;
+                        }
+                    }
+                }
+
+                if junction_matches(
+                    alignment_start,
+                    &ops,
+                    junction.start,
+                    junction.end,
+                    effective_anchor,
+                ) {
+                    count += 1;
+                }
+            }
+
+            if cigar_error_count > 0 {
+                log::warn!(
+                    "{} CIGAR operation(s) failed to parse in junction {}",
+                    cigar_error_count,
+                    junction.name
+                );
+            }
+            if strand_skip_count > 0 {
+                log::warn!(
+                    "{} read(s) skipped due to unclassifiable strand in junction {}",
+                    strand_skip_count,
+                    junction.name
+                );
+            }
+
+            Ok(count)
+        }
+    }
+
+    /// Multi-junction counting engine.
+    pub struct JunctionEngine {
+        config: EngineConfig,
+    }
+
+    impl JunctionEngine {
+        pub fn new(config: EngineConfig) -> Self {
+            assert!(
+                config.concurrency > 0,
+                "concurrency must be >= 1, got {}",
+                config.concurrency
+            );
+            Self { config }
+        }
+
+        pub(crate) fn build_filters(&self) -> Vec<Box<dyn RecordFilter>> {
+            let mut filters: Vec<Box<dyn RecordFilter>> = Vec::new();
+            if let Some(flags) = self.config.exclude_flags {
+                filters.push(Box::new(crate::filter::FlagFilter(flags)));
+            }
+            filters
+        }
+
+        pub(crate) fn build_classifier(&self) -> Box<dyn StrandClassifier> {
+            match self.config.lib_type {
+                crate::types::LibFragmentType::Isr => Box::new(crate::strand::IsrClassifier),
+                crate::types::LibFragmentType::Isf => Box::new(crate::strand::IsfClassifier),
+            }
+        }
+
+        async fn process_one(
+            &self,
+            mut junction: JunctionRegion,
+        ) -> Result<(JunctionRegion, u64)> {
+            junction.anchor_length =
+                Some(junction.anchor_length.unwrap_or(self.config.anchor_length));
+
+            let mut source =
+                BamSource::open(&self.config.bam_path, self.config.index_path.as_deref()).await?;
+            let filters = self.build_filters();
+            let classifier = self.build_classifier();
+            let count = source
+                .process_junction(&junction, &filters, classifier.as_ref())
+                .await?;
+            Ok((junction, count))
+        }
+
+        pub fn run(
+            &self,
+            junctions: Vec<JunctionRegion>,
+        ) -> impl futures::Stream<Item = Result<(JunctionRegion, u64)>> + '_ {
+            use futures::stream::{self, StreamExt};
+
+            stream::iter(junctions)
+                .map(|junction| self.process_one(junction))
+                .buffered(self.config.concurrency)
         }
     }
 
@@ -561,6 +719,39 @@ mod tests {
             anchor_length: 0,
         };
         let engine = PileEngine::new(config);
+        let mut stream = std::pin::pin!(engine.run(vec![]));
+        assert!(stream.next().await.is_none());
+    }
+
+    #[test]
+    fn junction_engine_rejects_zero_concurrency() {
+        let config = EngineConfig {
+            bam_path: "dummy.bam".into(),
+            exclude_flags: None,
+            lib_type: crate::types::LibFragmentType::Isr,
+            concurrency: 0,
+            index_path: None,
+            chunk_size: None,
+            anchor_length: 0,
+        };
+        let result = std::panic::catch_unwind(|| JunctionEngine::new(config));
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn junction_engine_empty_regions() {
+        use futures::stream::StreamExt;
+
+        let config = EngineConfig {
+            bam_path: "dummy.bam".into(),
+            exclude_flags: None,
+            lib_type: crate::types::LibFragmentType::Isr,
+            concurrency: 1,
+            index_path: None,
+            chunk_size: None,
+            anchor_length: 0,
+        };
+        let engine = JunctionEngine::new(config);
         let mut stream = std::pin::pin!(engine.run(vec![]));
         assert!(stream.next().await.is_none());
     }
