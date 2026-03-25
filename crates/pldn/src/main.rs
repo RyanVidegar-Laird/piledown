@@ -200,7 +200,7 @@ fn run_junctions(shared: SharedArgs) -> Result<()> {
                 write_junction_stream_as_arrow(stream, stdout).await
             }
             OutputFormat::Parquet => {
-                let props = piledown::output::parquet_props_builder()
+                let props = piledown::output::junction_parquet_props_builder()
                     .set_max_row_group_row_count(Some(shared.row_group_size))
                     .build();
                 let stdout = tokio::io::stdout();

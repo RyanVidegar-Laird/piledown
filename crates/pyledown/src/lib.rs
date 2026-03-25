@@ -584,6 +584,11 @@ mod pyledown {
             })
         }
 
+        fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+            let class_name: Bound<'_, PyString> = slf.get_type().qualname()?;
+            Ok(format!("{}({:#?})", class_name, slf.borrow().input_bam))
+        }
+
         fn generate(
             &self,
             _py: Python<'_>,

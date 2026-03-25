@@ -83,7 +83,7 @@ pub fn junction_to_record_batch(junction: JunctionRegion, count: u64) -> Result<
     Ok(batch)
 }
 
-/// Base builder for Parquet writer properties.
+/// Base builder for coverage Parquet writer properties.
 /// Uses DELTA_BINARY_PACKED for pos/up/down columns and SNAPPY compression.
 pub fn parquet_props_builder() -> parquet::file::properties::WriterPropertiesBuilder {
     use parquet::basic::{Compression, Encoding};
@@ -95,6 +95,21 @@ pub fn parquet_props_builder() -> parquet::file::properties::WriterPropertiesBui
         .set_column_encoding(ColumnPath::from("pos"), Encoding::DELTA_BINARY_PACKED)
         .set_column_encoding(ColumnPath::from("up"), Encoding::DELTA_BINARY_PACKED)
         .set_column_encoding(ColumnPath::from("down"), Encoding::DELTA_BINARY_PACKED)
+        .set_compression(Compression::SNAPPY)
+}
+
+/// Builder for junction Parquet writer properties.
+/// Uses DELTA_BINARY_PACKED for start/end/count columns and SNAPPY compression.
+pub fn junction_parquet_props_builder() -> parquet::file::properties::WriterPropertiesBuilder {
+    use parquet::basic::{Compression, Encoding};
+    use parquet::file::properties::WriterProperties;
+    use parquet::schema::types::ColumnPath;
+
+    WriterProperties::builder()
+        .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
+        .set_column_encoding(ColumnPath::from("start"), Encoding::DELTA_BINARY_PACKED)
+        .set_column_encoding(ColumnPath::from("end"), Encoding::DELTA_BINARY_PACKED)
+        .set_column_encoding(ColumnPath::from("count"), Encoding::DELTA_BINARY_PACKED)
         .set_compression(Compression::SNAPPY)
 }
 
