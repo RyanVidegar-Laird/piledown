@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use futures::stream::StreamExt;
-use piledown::engine::{EngineConfig, PileEngine};
+use piledown::engine::{EngineConfig, JunctionEngine, PileEngine};
+use piledown::junction::JunctionRegion;
 use piledown::output::to_record_batch;
 use piledown::region::PileRegion;
 use piledown::types::{LibFragmentType, Strand};
@@ -358,4 +359,203 @@ async fn single_region_isf_reverse_matches_golden() {
             "mismatch at pos {pos}: actual=({a_up},{a_down}) golden=({g_up},{g_down})"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Junction quantification integration tests
+// ---------------------------------------------------------------------------
+
+fn junction_config() -> EngineConfig {
+    EngineConfig {
+        bam_path: test_bam(),
+        exclude_flags: None,
+        lib_type: LibFragmentType::Isr,
+        concurrency: 1,
+        index_path: None,
+        chunk_size: None,
+        anchor_length: 0,
+    }
+}
+
+#[tokio::test]
+async fn junction_known_splice_site() {
+    // chr1:153990803-153991114 — 122 reads, all ISR-forward
+    let junction = JunctionRegion::new(
+        "chr1".into(),
+        153990803,
+        153991114,
+        "test_junction".into(),
+        Strand::Either,
+    )
+    .unwrap();
+
+    let engine = JunctionEngine::new(junction_config());
+    let mut stream = std::pin::pin!(engine.run(vec![junction]));
+    let (jr, count) = stream.next().await.unwrap().unwrap();
+
+    assert_eq!(jr.name, "test_junction");
+    assert_eq!(count, 122);
+}
+
+#[tokio::test]
+async fn junction_zero_count_region() {
+    // A junction that doesn't exist in the BAM
+    let junction =
+        JunctionRegion::new("chr1".into(), 1, 50, "no_junction".into(), Strand::Either).unwrap();
+
+    let engine = JunctionEngine::new(junction_config());
+    let mut stream = std::pin::pin!(engine.run(vec![junction]));
+    let (_, count) = stream.next().await.unwrap().unwrap();
+
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn junction_strand_filtering() {
+    // chr1:23694792-23695797 — 47 total, fwd=46, rev=1 under ISR
+    let junction_either = JunctionRegion::new(
+        "chr1".into(),
+        23694792,
+        23695797,
+        "either".into(),
+        Strand::Either,
+    )
+    .unwrap();
+    let junction_forward = JunctionRegion::new(
+        "chr1".into(),
+        23694792,
+        23695797,
+        "forward".into(),
+        Strand::Forward,
+    )
+    .unwrap();
+    let junction_reverse = JunctionRegion::new(
+        "chr1".into(),
+        23694792,
+        23695797,
+        "reverse".into(),
+        Strand::Reverse,
+    )
+    .unwrap();
+
+    let engine = JunctionEngine::new(junction_config());
+    let results: Vec<_> = {
+        let stream = std::pin::pin!(engine.run(vec![
+            junction_either,
+            junction_forward,
+            junction_reverse
+        ]));
+        stream
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+
+    let either_count = results[0].1;
+    let forward_count = results[1].1;
+    let reverse_count = results[2].1;
+
+    assert_eq!(either_count, 47);
+    assert_eq!(forward_count, 46);
+    assert_eq!(reverse_count, 1);
+
+    // Forward + Reverse should equal Either
+    assert_eq!(
+        forward_count + reverse_count,
+        either_count,
+        "forward ({forward_count}) + reverse ({reverse_count}) != either ({either_count})"
+    );
+}
+
+#[tokio::test]
+async fn junction_multiple_junctions() {
+    // Test processing multiple junctions in one run
+    let junctions = vec![
+        // chr1:153990803-153991114 — 122 reads
+        JunctionRegion::new(
+            "chr1".into(),
+            153990803,
+            153991114,
+            "j1".into(),
+            Strand::Either,
+        )
+        .unwrap(),
+        // chr1:153534831-153535201 — 104 reads
+        JunctionRegion::new(
+            "chr1".into(),
+            153534831,
+            153535201,
+            "j2".into(),
+            Strand::Either,
+        )
+        .unwrap(),
+        // Fake junction — 0 reads
+        JunctionRegion::new("chr1".into(), 1, 50, "no_match".into(), Strand::Either).unwrap(),
+    ];
+
+    let mut config = junction_config();
+    config.concurrency = 2;
+
+    let engine = JunctionEngine::new(config);
+    let results: Vec<_> = {
+        let stream = std::pin::pin!(engine.run(junctions));
+        stream
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+
+    assert_eq!(results.len(), 3);
+    assert_eq!(results[0].1, 122, "first junction should have 122 reads");
+    assert_eq!(results[1].1, 104, "second junction should have 104 reads");
+    assert_eq!(results[2].1, 0, "fake junction should have zero reads");
+}
+
+#[tokio::test]
+async fn junction_with_anchor_filter() {
+    // chr1:23694792-23695797 — 47 reads without anchor, 3 with anchor >= 20
+    let junction_no_anchor = JunctionRegion::new(
+        "chr1".into(),
+        23694792,
+        23695797,
+        "no_anchor".into(),
+        Strand::Either,
+    )
+    .unwrap();
+
+    let mut junction_with_anchor = JunctionRegion::new(
+        "chr1".into(),
+        23694792,
+        23695797,
+        "with_anchor".into(),
+        Strand::Either,
+    )
+    .unwrap();
+    junction_with_anchor.anchor_length = Some(20);
+
+    let engine = JunctionEngine::new(junction_config());
+    let results: Vec<_> = {
+        let stream =
+            std::pin::pin!(engine.run(vec![junction_no_anchor, junction_with_anchor]));
+        stream
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+
+    let no_anchor_count = results[0].1;
+    let with_anchor_count = results[1].1;
+
+    assert_eq!(no_anchor_count, 47);
+    assert_eq!(with_anchor_count, 3);
+    assert!(
+        with_anchor_count <= no_anchor_count,
+        "anchor-filtered count ({with_anchor_count}) should be <= unfiltered ({no_anchor_count})"
+    );
 }
