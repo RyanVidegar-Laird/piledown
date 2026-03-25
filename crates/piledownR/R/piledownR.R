@@ -59,7 +59,7 @@ pile_params <- function(
     PileParams$new(
       input_bam, lib_fragment_type,
       region = region, name = name, strand = strand,
-      regions = NULL, region_names = NULL, region_strands = NULL,
+      regions = NULL, names = NULL, strands = NULL,
       seqs = NULL, starts = NULL, ends = NULL,
       regions_file = NULL,
       exclude_flags = exclude_flags, index_path = index_path,
@@ -79,7 +79,7 @@ pile_params <- function(
     PileParams$new(
       input_bam, lib_fragment_type,
       region = NULL, name = NULL, strand = NULL,
-      regions = regions, region_names = names, region_strands = strands,
+      regions = regions, names = names, strands = strands,
       seqs = NULL, starts = NULL, ends = NULL,
       regions_file = NULL,
       exclude_flags = exclude_flags, index_path = index_path,
@@ -100,7 +100,7 @@ pile_params <- function(
     PileParams$new(
       input_bam, lib_fragment_type,
       region = NULL, name = NULL, strand = NULL,
-      regions = NULL, region_names = names, region_strands = strands,
+      regions = NULL, names = names, strands = strands,
       seqs = seqs, starts = as.numeric(starts), ends = as.numeric(ends),
       regions_file = NULL,
       exclude_flags = exclude_flags, index_path = index_path,
@@ -122,8 +122,8 @@ pile_params <- function(
     PileParams$new(
       input_bam, lib_fragment_type,
       region = NULL, name = NULL, strand = NULL,
-      regions = NULL, region_names = as.character(regions_df$name),
-      region_strands = as.character(regions_df$strand),
+      regions = NULL, names = as.character(regions_df$name),
+      strands = as.character(regions_df$strand),
       seqs = as.character(regions_df$seq),
       starts = as.numeric(regions_df$start),
       ends = as.numeric(regions_df$end),
@@ -136,7 +136,7 @@ pile_params <- function(
     PileParams$new(
       input_bam, lib_fragment_type,
       region = NULL, name = NULL, strand = NULL,
-      regions = NULL, region_names = NULL, region_strands = NULL,
+      regions = NULL, names = NULL, strands = NULL,
       seqs = NULL, starts = NULL, ends = NULL,
       regions_file = regions_file,
       exclude_flags = exclude_flags, index_path = index_path,
@@ -214,7 +214,7 @@ junction_params <- function(
     JunctionParams$new(
       input_bam, lib_fragment_type,
       seqs = seqs, starts = as.numeric(starts), ends = as.numeric(ends),
-      region_names = names, region_strands = strands,
+      names = names, strands = strands,
       junctions_file = NULL,
       exclude_flags = exclude_flags, index_path = index_path,
       concurrency = concurrency, anchor_length = anchor_length
@@ -236,8 +236,8 @@ junction_params <- function(
       seqs = as.character(junctions_df$seq),
       starts = as.numeric(junctions_df$start),
       ends = as.numeric(junctions_df$end),
-      region_names = as.character(junctions_df$name),
-      region_strands = as.character(junctions_df$strand),
+      names = as.character(junctions_df$name),
+      strands = as.character(junctions_df$strand),
       junctions_file = NULL,
       exclude_flags = exclude_flags, index_path = index_path,
       concurrency = concurrency, anchor_length = anchor_length
@@ -246,7 +246,7 @@ junction_params <- function(
     JunctionParams$new(
       input_bam, lib_fragment_type,
       seqs = NULL, starts = NULL, ends = NULL,
-      region_names = NULL, region_strands = NULL,
+      names = NULL, strands = NULL,
       junctions_file = junctions_file,
       exclude_flags = exclude_flags, index_path = index_path,
       concurrency = concurrency, anchor_length = anchor_length

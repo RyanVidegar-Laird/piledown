@@ -42,8 +42,8 @@ jp <- junction_params(
   seqs = c("chr1", "chr1"),
   starts = c(153990803, 23694792),
   ends = c(153991114, 23695797),
-  region_names = c("junc_a", "junc_b"),
-  region_strands = c("+", "-")
+  names = c("junc_a", "junc_b"),
+  strands = c("+", "-")
 )
 
 junc_reader <- generate(jp)

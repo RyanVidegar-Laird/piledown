@@ -12,7 +12,7 @@ NULL
 
 PileParams <- new.env(parent = emptyenv())
 
-PileParams$new <- function(input_bam, lib_fragment_type, region, name, strand, regions, region_names, region_strands, seqs, starts, ends, regions_file, exclude_flags, index_path, concurrency, chunk_size, anchor_length) .Call(wrap__PileParams__new, input_bam, lib_fragment_type, region, name, strand, regions, region_names, region_strands, seqs, starts, ends, regions_file, exclude_flags, index_path, concurrency, chunk_size, anchor_length)
+PileParams$new <- function(input_bam, lib_fragment_type, region, name, strand, regions, names, strands, seqs, starts, ends, regions_file, exclude_flags, index_path, concurrency, chunk_size, anchor_length) .Call(wrap__PileParams__new, input_bam, lib_fragment_type, region, name, strand, regions, names, strands, seqs, starts, ends, regions_file, exclude_flags, index_path, concurrency, chunk_size, anchor_length)
 
 PileParams$generate_stream <- function() .Call(wrap__PileParams__generate_stream, self)
 
@@ -24,7 +24,7 @@ PileParams$generate_stream <- function() .Call(wrap__PileParams__generate_stream
 
 JunctionParams <- new.env(parent = emptyenv())
 
-JunctionParams$new <- function(input_bam, lib_fragment_type, seqs, starts, ends, region_names, region_strands, junctions_file, exclude_flags, index_path, concurrency, anchor_length) .Call(wrap__JunctionParams__new, input_bam, lib_fragment_type, seqs, starts, ends, region_names, region_strands, junctions_file, exclude_flags, index_path, concurrency, anchor_length)
+JunctionParams$new <- function(input_bam, lib_fragment_type, seqs, starts, ends, names, strands, junctions_file, exclude_flags, index_path, concurrency, anchor_length) .Call(wrap__JunctionParams__new, input_bam, lib_fragment_type, seqs, starts, ends, names, strands, junctions_file, exclude_flags, index_path, concurrency, anchor_length)
 
 JunctionParams$generate_stream <- function() .Call(wrap__JunctionParams__generate_stream, self)
 

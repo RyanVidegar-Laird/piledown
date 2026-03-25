@@ -71,8 +71,8 @@ pub struct PileParams {
     starts: Option<Vec<f64>>,
     ends: Option<Vec<f64>>,
     // Shared by paths 2 and 3
-    region_names: Option<Vec<String>>,
-    region_strands: Option<Vec<String>>,
+    names: Option<Vec<String>>,
+    strands: Option<Vec<String>>,
     // Path 5: TSV file
     regions_file: Option<PathBuf>,
     // Engine config
@@ -95,16 +95,16 @@ impl PileParams {
         } else if let Some(regions) = &self.regions {
             // Path 2: region strings
             let names = self
-                .region_names
+                .names
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("'regions' requires 'region_names'"))?;
+                .ok_or_else(|| anyhow::anyhow!("'regions' requires 'names'"))?;
             let strands = self
-                .region_strands
+                .strands
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("'regions' requires 'region_strands'"))?;
+                .ok_or_else(|| anyhow::anyhow!("'regions' requires 'strands'"))?;
             if regions.len() != names.len() || regions.len() != strands.len() {
                 anyhow::bail!(
-                    "'regions' ({}), 'region_names' ({}), 'region_strands' ({}) must all be the same length",
+                    "'regions' ({}), 'names' ({}), 'strands' ({}) must all be the same length",
                     regions.len(),
                     names.len(),
                     strands.len()
@@ -130,13 +130,13 @@ impl PileParams {
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'ends'"))?;
             let names = self
-                .region_names
+                .names
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'region_names'"))?;
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'names'"))?;
             let strands = self
-                .region_strands
+                .strands
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'region_strands'"))?;
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'strands'"))?;
             let len = seqs.len();
             if starts.len() != len
                 || ends.len() != len
@@ -144,7 +144,7 @@ impl PileParams {
                 || strands.len() != len
             {
                 anyhow::bail!(
-                    "'seqs' ({}), 'starts' ({}), 'ends' ({}), 'region_names' ({}), 'region_strands' ({}) must all be the same length",
+                    "'seqs' ({}), 'starts' ({}), 'ends' ({}), 'names' ({}), 'strands' ({}) must all be the same length",
                     len,
                     starts.len(),
                     ends.len(),
@@ -228,8 +228,8 @@ impl PileParams {
     /// @param name Region name (required with region).
     /// @param strand Strand string (required with region).
     /// @param regions Optional character vector of region strings.
-    /// @param region_names Character vector of region names.
-    /// @param region_strands Character vector of strand strings.
+    /// @param names Character vector of region names.
+    /// @param strands Character vector of strand strings.
     /// @param seqs Optional character vector of sequence names.
     /// @param starts Numeric vector of start positions.
     /// @param ends Numeric vector of end positions.
@@ -248,8 +248,8 @@ impl PileParams {
         name: Option<&str>,
         strand: Option<&str>,
         regions: Option<Vec<String>>,
-        region_names: Option<Vec<String>>,
-        region_strands: Option<Vec<String>>,
+        names: Option<Vec<String>>,
+        strands: Option<Vec<String>>,
         seqs: Option<Vec<String>>,
         starts: Option<Vec<f64>>,
         ends: Option<Vec<f64>>,
@@ -307,8 +307,8 @@ impl PileParams {
             seqs,
             starts,
             ends,
-            region_names,
-            region_strands,
+            names,
+            strands,
             regions_file: regions_file.map(PathBuf::from),
             lib_fragment_type,
             exclude_flags: exclude_flags_val,
@@ -337,8 +337,8 @@ pub struct JunctionParams {
     seqs: Option<Vec<String>>,
     starts: Option<Vec<f64>>,
     ends: Option<Vec<f64>>,
-    region_names: Option<Vec<String>>,
-    region_strands: Option<Vec<String>>,
+    names: Option<Vec<String>>,
+    strands: Option<Vec<String>>,
     junctions_file: Option<PathBuf>,
     lib_fragment_type: LibFragmentType,
     exclude_flags: Option<u16>,
@@ -351,22 +351,20 @@ impl JunctionParams {
     fn build_junctions(&self) -> Result<Vec<JunctionRegion>> {
         if let Some(seqs) = &self.seqs {
             let starts = self.starts.as_ref().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "'seqs' requires 'starts', 'ends', 'region_names', 'region_strands'"
-                )
+                anyhow::anyhow!("'seqs' requires 'starts', 'ends', 'names', 'strands'")
             })?;
             let ends = self
                 .ends
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'ends'"))?;
             let names = self
-                .region_names
+                .names
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'region_names'"))?;
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'names'"))?;
             let strands = self
-                .region_strands
+                .strands
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'region_strands'"))?;
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'strands'"))?;
             let len = seqs.len();
             if starts.len() != len
                 || ends.len() != len
@@ -443,8 +441,8 @@ impl JunctionParams {
     /// @param seqs Character vector of sequence names.
     /// @param starts Numeric vector of junction start positions.
     /// @param ends Numeric vector of junction end positions.
-    /// @param region_names Character vector of junction names.
-    /// @param region_strands Character vector of strand strings.
+    /// @param names Character vector of junction names.
+    /// @param strands Character vector of strand strings.
     /// @param junctions_file Optional path to TSV junctions file.
     /// @param exclude_flags Optional SAM flags to exclude.
     /// @param index_path Optional path to BAM index.
@@ -458,8 +456,8 @@ impl JunctionParams {
         seqs: Option<Vec<String>>,
         starts: Option<Vec<f64>>,
         ends: Option<Vec<f64>>,
-        region_names: Option<Vec<String>>,
-        region_strands: Option<Vec<String>>,
+        names: Option<Vec<String>>,
+        strands: Option<Vec<String>>,
         junctions_file: Option<&str>,
         exclude_flags: Option<i32>,
         index_path: Option<&str>,
@@ -494,8 +492,8 @@ impl JunctionParams {
             seqs,
             starts,
             ends,
-            region_names,
-            region_strands,
+            names,
+            strands,
             junctions_file: junctions_file.map(PathBuf::from),
             lib_fragment_type,
             exclude_flags: exclude_flags_val,
@@ -536,8 +534,8 @@ mod tests {
             seqs: None,
             starts: None,
             ends: None,
-            region_names: None,
-            region_strands: None,
+            names: None,
+            strands: None,
             regions_file: None,
             lib_fragment_type: LibFragmentType::Isr,
             exclude_flags: None,
@@ -562,8 +560,8 @@ mod tests {
     fn builds_region_strings() {
         let params = PileParams {
             regions: Some(vec!["chr1:100-200".into(), "chr2:300-400".into()]),
-            region_names: Some(vec!["g1".into(), "g2".into()]),
-            region_strands: Some(vec!["+".into(), "-".into()]),
+            names: Some(vec!["g1".into(), "g2".into()]),
+            strands: Some(vec!["+".into(), "-".into()]),
             region: None,
             name: None,
             strand: None,
@@ -584,8 +582,8 @@ mod tests {
             seqs: Some(vec!["chr1".into(), "chr2".into()]),
             starts: Some(vec![100.0, 300.0]),
             ends: Some(vec![200.0, 400.0]),
-            region_names: Some(vec!["g1".into(), "g2".into()]),
-            region_strands: Some(vec!["+".into(), ".".into()]),
+            names: Some(vec!["g1".into(), "g2".into()]),
+            strands: Some(vec!["+".into(), ".".into()]),
             region: None,
             name: None,
             strand: None,
@@ -608,8 +606,8 @@ mod tests {
             seqs: None,
             starts: None,
             ends: None,
-            region_names: None,
-            region_strands: None,
+            names: None,
+            strands: None,
             regions_file: None,
             ..make_params_single()
         };
@@ -620,8 +618,8 @@ mod tests {
     fn rejects_length_mismatch() {
         let params = PileParams {
             regions: Some(vec!["chr1:100-200".into()]),
-            region_names: Some(vec!["g1".into(), "g2".into()]),
-            region_strands: Some(vec!["+".into()]),
+            names: Some(vec!["g1".into(), "g2".into()]),
+            strands: Some(vec!["+".into()]),
             region: None,
             name: None,
             strand: None,
@@ -657,8 +655,8 @@ mod tests {
             seqs: Some(vec!["chr1".into()]),
             starts: Some(vec![100.5]),
             ends: Some(vec![200.0]),
-            region_names: Some(vec!["g1".into()]),
-            region_strands: Some(vec!["+".into()]),
+            names: Some(vec!["g1".into()]),
+            strands: Some(vec!["+".into()]),
             region: None,
             name: None,
             strand: None,
@@ -675,8 +673,8 @@ mod tests {
             seqs: Some(vec!["chr1".into()]),
             starts: Some(vec![100.0]),
             ends: Some(vec![500.0]),
-            region_names: Some(vec!["j1".into()]),
-            region_strands: Some(vec!["+".into()]),
+            names: Some(vec!["j1".into()]),
+            strands: Some(vec!["+".into()]),
             junctions_file: None,
             lib_fragment_type: LibFragmentType::Isr,
             exclude_flags: None,
@@ -711,8 +709,8 @@ mod tests {
             seqs: Some(vec!["chr1".into()]),
             starts: Some(vec![100.0]),
             ends: Some(vec![200.7]),
-            region_names: Some(vec!["g1".into()]),
-            region_strands: Some(vec!["+".into()]),
+            names: Some(vec!["g1".into()]),
+            strands: Some(vec!["+".into()]),
             region: None,
             name: None,
             strand: None,
