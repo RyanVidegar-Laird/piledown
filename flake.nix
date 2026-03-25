@@ -57,7 +57,7 @@
           pyproject = true;
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
             src = ./.;
-            hash = "sha256-luI7IKndf9GQCYXNnrZvPdRjxRL0LsUdgS5nFTFYTPA=";
+            hash = "sha256-K01WNUCrPdt+PqKbav87InForM5uWVjgwyEW8iaBdUA=";
           };
           nativeBuildInputs = with pkgs.rustPlatform; [
             cargoSetupHook
@@ -78,7 +78,7 @@
           '';
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
             src = ./.;
-            hash = "sha256-luI7IKndf9GQCYXNnrZvPdRjxRL0LsUdgS5nFTFYTPA=";
+            hash = "sha256-K01WNUCrPdt+PqKbav87InForM5uWVjgwyEW8iaBdUA=";
           };
           nativeBuildInputs = with pkgs; [
             rustPlatform.cargoSetupHook
