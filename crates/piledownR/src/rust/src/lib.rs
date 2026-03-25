@@ -9,8 +9,9 @@ use arrow::ffi_stream::FFI_ArrowArrayStream;
 use noodles::sam::alignment::record::Flags;
 
 use piledown::coverage::CoverageMap;
-use piledown::engine::{runtime, EngineConfig, PileEngine};
-use piledown::output::to_record_batch;
+use piledown::engine::{runtime, EngineConfig, JunctionEngine, PileEngine};
+use piledown::junction::{read_junctions_tsv, JunctionRegion};
+use piledown::output::{junction_to_record_batch, to_record_batch};
 use piledown::region::PileRegion;
 use piledown::types::{LibFragmentType, Strand};
 
@@ -329,9 +330,196 @@ impl PileParams {
     }
 }
 
+/// Parameters for a piledown junction counting run, exposed to R.
+#[extendr]
+pub struct JunctionParams {
+    input_bam: PathBuf,
+    seqs: Option<Vec<String>>,
+    starts: Option<Vec<f64>>,
+    ends: Option<Vec<f64>>,
+    region_names: Option<Vec<String>>,
+    region_strands: Option<Vec<String>>,
+    junctions_file: Option<PathBuf>,
+    lib_fragment_type: LibFragmentType,
+    exclude_flags: Option<u16>,
+    index_path: Option<PathBuf>,
+    concurrency: usize,
+    anchor_length: u64,
+}
+
+impl JunctionParams {
+    fn build_junctions(&self) -> Result<Vec<JunctionRegion>> {
+        if let Some(seqs) = &self.seqs {
+            let starts = self.starts.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("'seqs' requires 'starts', 'ends', 'region_names', 'region_strands'")
+            })?;
+            let ends = self
+                .ends
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'ends'"))?;
+            let names = self
+                .region_names
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'region_names'"))?;
+            let strands = self
+                .region_strands
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("'seqs' requires 'region_strands'"))?;
+            let len = seqs.len();
+            if starts.len() != len
+                || ends.len() != len
+                || names.len() != len
+                || strands.len() != len
+            {
+                anyhow::bail!("all vectors must be same length");
+            }
+            seqs.iter()
+                .zip(starts.iter())
+                .zip(ends.iter())
+                .zip(names.iter())
+                .zip(strands.iter())
+                .map(|((((seq, &start), &end), name), strand_str)| {
+                    if !start.is_finite() || start < 0.0 || start.fract() != 0.0 {
+                        anyhow::bail!("start must be a non-negative whole number, got {start}");
+                    }
+                    if !end.is_finite() || end < 0.0 || end.fract() != 0.0 {
+                        anyhow::bail!("end must be a non-negative whole number, got {end}");
+                    }
+                    let strand = parse_strand(strand_str)?;
+                    JunctionRegion::new(seq.clone(), start as u64, end as u64, name.clone(), strand)
+                })
+                .collect::<Result<Vec<_>>>()
+        } else if let Some(path) = &self.junctions_file {
+            let file = std::fs::File::open(path)?;
+            read_junctions_tsv(file)
+        } else {
+            anyhow::bail!("no junction source configured")
+        }
+    }
+
+    fn run_engine(&self) -> Result<Vec<arrow::array::RecordBatch>> {
+        use futures::StreamExt;
+
+        let junctions = self.build_junctions()?;
+
+        let config = EngineConfig {
+            bam_path: self.input_bam.clone(),
+            exclude_flags: self.exclude_flags.map(Flags::from),
+            lib_type: self.lib_fragment_type,
+            concurrency: self.concurrency,
+            index_path: self.index_path.clone(),
+            chunk_size: None,
+            anchor_length: self.anchor_length,
+        };
+
+        let engine = JunctionEngine::new(config);
+        let rt = runtime();
+
+        let results: Vec<(JunctionRegion, u64)> = rt.block_on(async {
+            let stream = engine.run(junctions);
+            let pinned = std::pin::pin!(stream);
+            pinned
+                .collect::<Vec<_>>()
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()
+        })?;
+
+        results
+            .into_iter()
+            .map(|(jr, count)| junction_to_record_batch(jr, count))
+            .collect::<Result<Vec<_>, _>>()
+    }
+}
+
+#[extendr]
+impl JunctionParams {
+    /// Create a new JunctionParams for junction counting.
+    ///
+    /// @param input_bam Path to indexed BAM file.
+    /// @param lib_fragment_type One of "isr", "isf".
+    /// @param seqs Character vector of sequence names.
+    /// @param starts Numeric vector of junction start positions.
+    /// @param ends Numeric vector of junction end positions.
+    /// @param region_names Character vector of junction names.
+    /// @param region_strands Character vector of strand strings.
+    /// @param junctions_file Optional path to TSV junctions file.
+    /// @param exclude_flags Optional SAM flags to exclude.
+    /// @param index_path Optional path to BAM index.
+    /// @param concurrency Number of concurrent processors (default 4).
+    /// @param anchor_length Minimum flanking match bases (default NULL = 0).
+    /// @export
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        input_bam: &str,
+        lib_fragment_type: &str,
+        seqs: Option<Vec<String>>,
+        starts: Option<Vec<f64>>,
+        ends: Option<Vec<f64>>,
+        region_names: Option<Vec<String>>,
+        region_strands: Option<Vec<String>>,
+        junctions_file: Option<&str>,
+        exclude_flags: Option<i32>,
+        index_path: Option<&str>,
+        concurrency: Option<i32>,
+        anchor_length: Option<i32>,
+    ) -> Self {
+        let lib_fragment_type = parse_lib_type(lib_fragment_type).unwrap_or_else(|e| panic!("{e}"));
+
+        let sources = [seqs.is_some(), junctions_file.is_some()];
+        let count = sources.iter().filter(|&&s| s).count();
+        if count != 1 {
+            panic!("provide exactly one of: seqs, junctions_file");
+        }
+
+        let concurrency_val = concurrency.unwrap_or(4);
+        if concurrency_val < 1 {
+            panic!("concurrency must be >= 1");
+        }
+        let exclude_flags_val = match exclude_flags {
+            Some(f) if !(0..=65535).contains(&f) => panic!("exclude_flags must be 0-65535"),
+            Some(f) => Some(f as u16),
+            None => None,
+        };
+        let anchor_length_val = match anchor_length {
+            Some(a) if a < 0 => panic!("anchor_length must be >= 0"),
+            Some(a) => a as u64,
+            None => 0,
+        };
+
+        JunctionParams {
+            input_bam: PathBuf::from(input_bam),
+            seqs,
+            starts,
+            ends,
+            region_names,
+            region_strands,
+            junctions_file: junctions_file.map(PathBuf::from),
+            lib_fragment_type,
+            exclude_flags: exclude_flags_val,
+            index_path: index_path.map(PathBuf::from),
+            concurrency: concurrency_val as usize,
+            anchor_length: anchor_length_val,
+        }
+    }
+
+    /// Count reads matching each junction.
+    ///
+    /// Returns a nanoarrow_array_stream with columns:
+    /// name, seq, strand, start, end, count.
+    /// @export
+    fn generate_stream(&self) -> extendr_api::Result<Robj> {
+        let batches = self
+            .run_engine()
+            .map_err(|e| Error::Other(e.to_string()))?;
+        export_batches_to_r(batches)
+    }
+}
+
 extendr_module! {
     mod piledownR;
     impl PileParams;
+    impl JunctionParams;
 }
 
 #[cfg(test)]
@@ -479,6 +667,42 @@ mod tests {
             ..make_params_single()
         };
         assert!(params.build_regions().is_err());
+    }
+
+    fn make_junction_params() -> JunctionParams {
+        JunctionParams {
+            input_bam: PathBuf::from("test.bam"),
+            seqs: Some(vec!["chr1".into()]),
+            starts: Some(vec![100.0]),
+            ends: Some(vec![500.0]),
+            region_names: Some(vec!["j1".into()]),
+            region_strands: Some(vec!["+".into()]),
+            junctions_file: None,
+            lib_fragment_type: LibFragmentType::Isr,
+            exclude_flags: None,
+            index_path: None,
+            concurrency: 4,
+            anchor_length: 0,
+        }
+    }
+
+    #[test]
+    fn junction_builds_from_vectors() {
+        let params = make_junction_params();
+        let junctions = params.build_junctions().unwrap();
+        assert_eq!(junctions.len(), 1);
+        assert_eq!(junctions[0].start, 100);
+        assert_eq!(junctions[0].end, 500);
+    }
+
+    #[test]
+    fn junction_rejects_no_source() {
+        let params = JunctionParams {
+            seqs: None,
+            junctions_file: None,
+            ..make_junction_params()
+        };
+        assert!(params.build_junctions().is_err());
     }
 
     #[test]
