@@ -85,6 +85,71 @@ pub fn filter_spans_by_anchor(spans: &[CigarSpan], anchor_length: u64) -> Vec<Ci
     result
 }
 
+/// Check if a read's CIGAR contains an N (intron skip) operation that exactly
+/// matches the junction defined by `junc_start..=junc_end` (1-based inclusive).
+///
+/// Only `Kind::Skip` (N) ops are considered — `Kind::Deletion` (D) is ignored.
+/// If `anchor_length > 0`, the immediately flanking Match ops (M/=/X) must each
+/// be >= `anchor_length` bases.
+///
+/// Returns true if any N op in the CIGAR matches and passes the anchor check.
+pub fn junction_matches(
+    alignment_start: u64,
+    ops: &[Op],
+    junc_start: u64,
+    junc_end: u64,
+    anchor_length: u64,
+) -> bool {
+    let mut pos = alignment_start;
+    let mut last_match_len: Option<u64> = None;
+
+    let mut i = 0;
+    while i < ops.len() {
+        let len = ops[i].len() as u64;
+        match ops[i].kind() {
+            Kind::Match | Kind::SequenceMatch | Kind::SequenceMismatch => {
+                last_match_len = Some(len);
+                pos += len;
+            }
+            Kind::Skip => {
+                let skip_start = pos;
+                let skip_end = pos + len - 1; // inclusive
+                pos += len;
+
+                if skip_start == junc_start && skip_end == junc_end {
+                    let left_ok = anchor_length == 0
+                        || last_match_len.map_or(false, |l| l >= anchor_length);
+
+                    let right_anchor = ops[(i + 1)..]
+                        .iter()
+                        .find_map(|op| match op.kind() {
+                            Kind::Match | Kind::SequenceMatch | Kind::SequenceMismatch => {
+                                Some(op.len() as u64)
+                            }
+                            Kind::Insertion | Kind::SoftClip | Kind::HardClip | Kind::Pad => None,
+                            Kind::Skip | Kind::Deletion => Some(0),
+                        });
+                    let right_ok = anchor_length == 0
+                        || right_anchor.map_or(false, |l| l >= anchor_length);
+
+                    if left_ok && right_ok {
+                        return true;
+                    }
+                }
+                last_match_len = None;
+            }
+            Kind::Deletion => {
+                pos += len;
+                last_match_len = None;
+            }
+            Kind::Insertion | Kind::SoftClip | Kind::HardClip | Kind::Pad => {}
+        }
+        i += 1;
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -480,5 +545,99 @@ mod tests {
     fn anchor_empty_spans() {
         let spans: Vec<CigarSpan> = vec![];
         assert_eq!(filter_spans_by_anchor(&spans, 5), spans);
+    }
+
+    // --- Junction matching tests ---
+
+    #[test]
+    fn junction_match_exact_n_op() {
+        // 24M400N24M aligned at pos 76: N spans 100..=499
+        let ops = vec![op(Kind::Match, 24), op(Kind::Skip, 400), op(Kind::Match, 24)];
+        assert!(junction_matches(76, &ops, 100, 499, 0));
+    }
+
+    #[test]
+    fn junction_no_match_wrong_start() {
+        // 24M400N24M aligned at pos 78: N spans 102..=501
+        let ops = vec![op(Kind::Match, 24), op(Kind::Skip, 400), op(Kind::Match, 24)];
+        assert!(!junction_matches(78, &ops, 100, 499, 0));
+    }
+
+    #[test]
+    fn junction_no_match_wrong_end() {
+        // 24M350N24M at pos 76: N spans 100..=449
+        let ops = vec![op(Kind::Match, 24), op(Kind::Skip, 350), op(Kind::Match, 24)];
+        assert!(!junction_matches(76, &ops, 100, 499, 0));
+    }
+
+    #[test]
+    fn junction_match_multi_junction_read() {
+        // 10M400N20M200N18M at pos 90: first N spans 100..=499, second N spans 520..=719
+        let ops = vec![
+            op(Kind::Match, 10),
+            op(Kind::Skip, 400),
+            op(Kind::Match, 20),
+            op(Kind::Skip, 200),
+            op(Kind::Match, 18),
+        ];
+        assert!(junction_matches(90, &ops, 100, 499, 0));
+        assert!(junction_matches(90, &ops, 520, 719, 0));
+        assert!(!junction_matches(90, &ops, 100, 719, 0));
+    }
+
+    #[test]
+    fn junction_no_match_deletion_op() {
+        // 24M5D24M at pos 76: D spans 100..=104, but D ops should NOT match
+        let ops = vec![op(Kind::Match, 24), op(Kind::Deletion, 5), op(Kind::Match, 24)];
+        assert!(!junction_matches(76, &ops, 100, 104, 0));
+    }
+
+    #[test]
+    fn junction_anchor_pass() {
+        // 10M400N10M at pos 90: N spans 100..=499, both anchors = 10
+        let ops = vec![op(Kind::Match, 10), op(Kind::Skip, 400), op(Kind::Match, 10)];
+        assert!(junction_matches(90, &ops, 100, 499, 5));
+        assert!(junction_matches(90, &ops, 100, 499, 10));
+    }
+
+    #[test]
+    fn junction_anchor_fail_left() {
+        // 3M400N10M at pos 97: N spans 100..=499, left anchor = 3
+        let ops = vec![op(Kind::Match, 3), op(Kind::Skip, 400), op(Kind::Match, 10)];
+        assert!(!junction_matches(97, &ops, 100, 499, 5));
+    }
+
+    #[test]
+    fn junction_anchor_fail_right() {
+        // 10M400N3M at pos 90: N spans 100..=499, right anchor = 3
+        let ops = vec![op(Kind::Match, 10), op(Kind::Skip, 400), op(Kind::Match, 3)];
+        assert!(!junction_matches(90, &ops, 100, 499, 5));
+    }
+
+    #[test]
+    fn junction_anchor_checks_flanking_match_only() {
+        // 10M400N2I10M at pos 90: N spans 100..=499
+        // Right flank is the 10M after the I (I doesn't consume ref, so right Match is 10)
+        let ops = vec![
+            op(Kind::Match, 10),
+            op(Kind::Skip, 400),
+            op(Kind::Insertion, 2),
+            op(Kind::Match, 10),
+        ];
+        assert!(junction_matches(90, &ops, 100, 499, 5));
+    }
+
+    #[test]
+    fn junction_n_at_read_boundary_no_left_anchor() {
+        // 400N24M at pos 100: N spans 100..=499, no left Match
+        let ops = vec![op(Kind::Skip, 400), op(Kind::Match, 24)];
+        assert!(junction_matches(100, &ops, 100, 499, 0));
+        assert!(!junction_matches(100, &ops, 100, 499, 1));
+    }
+
+    #[test]
+    fn junction_empty_ops() {
+        let ops: Vec<Op> = vec![];
+        assert!(!junction_matches(100, &ops, 100, 499, 0));
     }
 }
