@@ -2,18 +2,19 @@
 % Please edit documentation in R/piledownR.R
 \name{generate}
 \alias{generate}
-\title{Generate per-base coverage for configured regions.}
+\title{Generate results from a PileParams or JunctionParams object.}
 \usage{
 generate(params)
 }
 \arguments{
-\item{params}{A PileParams object created via \code{pile_params()}.}
+\item{params}{A PileParams or JunctionParams object.}
 }
 \value{
 An \code{arrow::RecordBatchReader}.
 }
 \description{
-Runs the piledown engine on the BAM file and regions configured in the
-given PileParams object. Returns an Arrow RecordBatchReader with columns:
+For PileParams, returns an Arrow RecordBatchReader with columns:
 name, seq, strand, pos, up, down.
+For JunctionParams, returns an Arrow RecordBatchReader with columns:
+name, seq, strand, start, end, count.
 }
