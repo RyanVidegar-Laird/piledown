@@ -1,9 +1,33 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use piledown::types::{LibFragmentType, OutputFormat, Strand};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = include_str!("../assets/logo.txt"))]
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Command {
+    /// Per-base coverage quantification (default when no subcommand given)
+    Coverage(CoverageArgs),
+    /// Junction quantification — count reads with exact splice junction matches
+    Junctions(SharedArgs),
+}
+
+#[derive(Parser, Debug, Clone)]
+pub struct CoverageArgs {
+    #[command(flatten)]
+    pub shared: SharedArgs,
+
+    /// Maximum positions per output batch (splits large regions)
+    #[arg(long)]
+    pub chunk_size: Option<usize>,
+}
+
+#[derive(Parser, Debug, Clone)]
+pub struct SharedArgs {
     /// Input alignment file (indexed BAM)
     pub input: std::path::PathBuf,
 
@@ -38,10 +62,6 @@ pub struct Cli {
     /// Path to BAM index file (.bai). If not specified, tries <bam>.bam.bai then <stem>.bai.
     #[arg(long)]
     pub bam_index: Option<std::path::PathBuf>,
-
-    /// Maximum positions per output batch (splits large regions)
-    #[arg(long)]
-    pub chunk_size: Option<usize>,
 
     /// Parquet row group size (default: 1000000). Only used with --output-format parquet.
     #[arg(long, default_value_t = 1_000_000)]
