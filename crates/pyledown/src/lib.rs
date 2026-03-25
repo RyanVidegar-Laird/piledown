@@ -443,6 +443,261 @@ mod pyledown {
             )
         }
     }
+
+    use piledown::engine::JunctionEngine;
+    use piledown::junction::{read_junctions_tsv, JunctionRegion};
+    use piledown::output::junction_to_record_batch;
+
+    fn extract_junction_dataframe(df: &Bound<'_, PyAny>) -> PyResult<Vec<JunctionRegion>> {
+        let seq_col: Vec<String> = df.get_item("seq")?.extract()?;
+        let start_col: Vec<u64> = df.get_item("start")?.extract()?;
+        let end_col: Vec<u64> = df.get_item("end")?.extract()?;
+        let name_col: Vec<String> = df.get_item("name")?.extract()?;
+        let strand_col: Vec<String> = df.get_item("strand")?.extract()?;
+        let anchor_col: Option<Vec<u64>> = df
+            .get_item("anchor")
+            .ok()
+            .and_then(|col| col.extract().ok());
+
+        let mut junctions = Vec::with_capacity(seq_col.len());
+        for i in 0..seq_col.len() {
+            let strand = parse_strand_py(&strand_col[i])?;
+            let mut jr = JunctionRegion::new(
+                seq_col[i].clone(),
+                start_col[i],
+                end_col[i],
+                name_col[i].clone(),
+                strand,
+            )
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            if let Some(ref anchors) = anchor_col {
+                jr.anchor_length = Some(anchors[i]);
+            }
+            junctions.push(jr);
+        }
+        Ok(junctions)
+    }
+
+    #[derive(Debug, Clone)]
+    #[pyclass(str, from_py_object)]
+    pub struct JunctionParams {
+        #[pyo3(get)]
+        pub input_bam: std::path::PathBuf,
+        #[pyo3(get)]
+        pub seqs: Option<Vec<String>>,
+        #[pyo3(get)]
+        pub starts: Option<Vec<u64>>,
+        #[pyo3(get)]
+        pub ends: Option<Vec<u64>>,
+        #[pyo3(get)]
+        pub names: Option<Vec<String>>,
+        #[pyo3(get)]
+        pub strands: Option<Vec<Strand>>,
+        pub junctions_df: Option<Vec<JunctionRegion>>,
+        #[pyo3(get)]
+        pub junctions_file: Option<std::path::PathBuf>,
+        #[pyo3(get)]
+        pub lib_fragment_type: LibFragmentType,
+        #[pyo3(get)]
+        pub exclude_flags: Option<u16>,
+        #[pyo3(get)]
+        pub index_path: Option<std::path::PathBuf>,
+        #[pyo3(get)]
+        pub concurrency: usize,
+        #[pyo3(get)]
+        pub anchor_length: u64,
+        #[pyo3(get)]
+        pub anchor_lengths: Option<Vec<u64>>,
+    }
+
+    #[pymethods]
+    impl JunctionParams {
+        #[new]
+        #[pyo3(signature = (
+            input_bam,
+            lib_fragment_type,
+            seqs=None,
+            starts=None,
+            ends=None,
+            names=None,
+            strands=None,
+            junctions_df=None,
+            junctions_file=None,
+            exclude_flags=None,
+            index_path=None,
+            concurrency=4,
+            anchor_length=0,
+            anchor_lengths=None,
+        ))]
+        #[allow(clippy::too_many_arguments)]
+        fn new(
+            input_bam: std::path::PathBuf,
+            lib_fragment_type: LibFragmentType,
+            seqs: Option<Vec<String>>,
+            starts: Option<Vec<u64>>,
+            ends: Option<Vec<u64>>,
+            names: Option<Vec<String>>,
+            strands: Option<Vec<Strand>>,
+            junctions_df: Option<&Bound<'_, PyAny>>,
+            junctions_file: Option<std::path::PathBuf>,
+            exclude_flags: Option<u16>,
+            index_path: Option<std::path::PathBuf>,
+            concurrency: usize,
+            anchor_length: u64,
+            anchor_lengths: Option<Vec<u64>>,
+        ) -> PyResult<Self> {
+            let sources = [
+                seqs.is_some(),
+                junctions_df.is_some(),
+                junctions_file.is_some(),
+            ];
+            let count = sources.iter().filter(|&&s| s).count();
+            if count != 1 {
+                return Err(PyValueError::new_err(
+                    "provide exactly one of: seqs, junctions_df, junctions_file",
+                ));
+            }
+            if concurrency == 0 {
+                return Err(PyValueError::new_err("concurrency must be >= 1"));
+            }
+
+            let parsed_df = match junctions_df {
+                Some(df) => Some(extract_junction_dataframe(df)?),
+                None => None,
+            };
+
+            Ok(Self {
+                input_bam,
+                seqs,
+                starts,
+                ends,
+                names,
+                strands,
+                junctions_df: parsed_df,
+                junctions_file,
+                lib_fragment_type,
+                exclude_flags,
+                index_path,
+                concurrency,
+                anchor_length,
+                anchor_lengths,
+            })
+        }
+
+        fn generate(
+            &self,
+            _py: Python<'_>,
+        ) -> PyResult<PyArrowType<Box<dyn RecordBatchReader + Send>>> {
+            let junctions = self.build_junctions()?;
+
+            let config = EngineConfig {
+                bam_path: self.input_bam.clone(),
+                exclude_flags: self.exclude_flags.map(Flags::from),
+                lib_type: self.lib_fragment_type,
+                concurrency: self.concurrency,
+                index_path: self.index_path.clone(),
+                chunk_size: None,
+                anchor_length: self.anchor_length,
+            };
+
+            let engine = JunctionEngine::new(config);
+            let rt = runtime();
+
+            let results: Vec<(JunctionRegion, u64)> = rt
+                .block_on(async {
+                    let stream = engine.run(junctions);
+                    let pinned = std::pin::pin!(stream);
+                    pinned
+                        .collect::<Vec<_>>()
+                        .await
+                        .into_iter()
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+            let batches: Vec<RecordBatch> = results
+                .into_iter()
+                .map(|(jr, count)| junction_to_record_batch(jr, count))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+            if batches.is_empty() {
+                return Err(PyValueError::new_err("no junctions produced output"));
+            }
+
+            let schema = batches[0].schema();
+            let reader =
+                arrow::record_batch::RecordBatchIterator::new(batches.into_iter().map(Ok), schema);
+
+            Ok(PyArrowType(Box::new(reader)))
+        }
+    }
+
+    impl JunctionParams {
+        pub(crate) fn build_junctions(&self) -> PyResult<Vec<JunctionRegion>> {
+            let mut junctions = if let Some(seqs) = &self.seqs {
+                let starts = self.starts.as_ref().ok_or_else(|| {
+                    PyValueError::new_err("'seqs' requires 'starts', 'ends', 'names', 'strands'")
+                })?;
+                let ends = self.ends.as_ref().ok_or_else(|| {
+                    PyValueError::new_err("'seqs' requires 'starts', 'ends', 'names', 'strands'")
+                })?;
+                let names = self.names.as_ref().ok_or_else(|| {
+                    PyValueError::new_err("'seqs' requires 'starts', 'ends', 'names', 'strands'")
+                })?;
+                let strands = self.strands.as_ref().ok_or_else(|| {
+                    PyValueError::new_err("'seqs' requires 'starts', 'ends', 'names', 'strands'")
+                })?;
+                let len = seqs.len();
+                if starts.len() != len || ends.len() != len || names.len() != len || strands.len() != len {
+                    return Err(PyValueError::new_err("all vectors must be same length"));
+                }
+                seqs.iter()
+                    .zip(starts)
+                    .zip(ends)
+                    .zip(names)
+                    .zip(strands)
+                    .map(|((((seq, &start), &end), name), &strand)| {
+                        JunctionRegion::new(seq.clone(), start, end, name.clone(), strand)
+                            .map_err(|e| PyValueError::new_err(e.to_string()))
+                    })
+                    .collect::<PyResult<Vec<_>>>()?
+            } else if let Some(df_junctions) = &self.junctions_df {
+                df_junctions.clone()
+            } else if let Some(path) = &self.junctions_file {
+                let file = std::fs::File::open(path)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                read_junctions_tsv(file)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?
+            } else {
+                return Err(PyValueError::new_err("no junction source configured"));
+            };
+
+            if let Some(anchors) = &self.anchor_lengths {
+                if anchors.len() != junctions.len() {
+                    return Err(PyValueError::new_err(format!(
+                        "'anchor_lengths' ({}) must match junction count ({})",
+                        anchors.len(),
+                        junctions.len()
+                    )));
+                }
+                for (junction, &anchor) in junctions.iter_mut().zip(anchors.iter()) {
+                    junction.anchor_length = Some(anchor);
+                }
+            }
+            Ok(junctions)
+        }
+    }
+
+    impl std::fmt::Display for JunctionParams {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "JunctionParams(bam={:?}, lib_type={:?}, concurrency={})",
+                self.input_bam, self.lib_fragment_type, self.concurrency
+            )
+        }
+    }
 }
 
 #[cfg(test)]
@@ -570,5 +825,50 @@ mod tests {
         params.strands = Some(vec![Strand::Forward, Strand::Reverse]);
 
         assert!(params.build_regions().is_err());
+    }
+
+    #[test]
+    fn junction_build_decomposed_vectors() {
+        let params = JunctionParams {
+            input_bam: "test.bam".into(),
+            seqs: Some(vec!["chr1".to_string()]),
+            starts: Some(vec![100]),
+            ends: Some(vec![500]),
+            names: Some(vec!["j1".to_string()]),
+            strands: Some(vec![Strand::Forward]),
+            junctions_df: None,
+            junctions_file: None,
+            lib_fragment_type: LibFragmentType::Isr,
+            exclude_flags: None,
+            index_path: None,
+            concurrency: 4,
+            anchor_length: 0,
+            anchor_lengths: None,
+        };
+        let junctions = params.build_junctions().unwrap();
+        assert_eq!(junctions.len(), 1);
+        assert_eq!(junctions[0].start, 100);
+        assert_eq!(junctions[0].end, 500);
+    }
+
+    #[test]
+    fn junction_build_rejects_start_equals_end() {
+        let params = JunctionParams {
+            input_bam: "test.bam".into(),
+            seqs: Some(vec!["chr1".to_string()]),
+            starts: Some(vec![100]),
+            ends: Some(vec![100]),
+            names: Some(vec!["j1".to_string()]),
+            strands: Some(vec![Strand::Forward]),
+            junctions_df: None,
+            junctions_file: None,
+            lib_fragment_type: LibFragmentType::Isr,
+            exclude_flags: None,
+            index_path: None,
+            concurrency: 4,
+            anchor_length: 0,
+            anchor_lengths: None,
+        };
+        assert!(params.build_junctions().is_err());
     }
 }
