@@ -24,10 +24,12 @@
           inherit system;
         };
 
+        version = "0.2.0";
+
         # CLI package (python3 needed because pyo3-build-config resolves across the workspace)
         pldn = pkgs.rustPlatform.buildRustPackage {
           pname = "pldn";
-          version = "0.1.0";
+          inherit version;
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           cargoBuildFlags = [ "-p" "pldn" ];
@@ -38,7 +40,7 @@
         # Static CLI binary for release artifacts
         pldn-static = pkgs.pkgsStatic.rustPlatform.buildRustPackage {
           pname = "pldn";
-          version = "0.1.0";
+          inherit version;
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           cargoBuildFlags = [ "-p" "pldn" ];
@@ -50,7 +52,7 @@
         python3 = pkgs.python3;
         pyledown = python3.pkgs.buildPythonPackage {
           pname = "pyledown";
-          version = "0.1.0";
+          inherit version;
           src = ./.;
           pyproject = true;
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
@@ -139,7 +141,7 @@
         checks = {
           clippy = pkgs.rustPlatform.buildRustPackage {
             pname = "piledown-clippy";
-            version = "0.1.0";
+            inherit version;
             inherit src;
             cargoLock.lockFile = ./Cargo.lock;
             nativeBuildInputs = [ python3 pkgs.R pkgs.clippy ];
@@ -152,7 +154,7 @@
 
           fmt = pkgs.stdenv.mkDerivation {
             pname = "piledown-fmt";
-            version = "0.1.0";
+            inherit version;
             inherit src;
             nativeBuildInputs = [ pkgs.rustfmt pkgs.cargo ];
             buildPhase = ''
@@ -163,7 +165,7 @@
 
           nextest = pkgs.rustPlatform.buildRustPackage {
             pname = "piledown-nextest";
-            version = "0.1.0";
+            inherit version;
             inherit src;
             cargoLock.lockFile = ./Cargo.lock;
             nativeBuildInputs = [ pkgs.cargo-nextest python3 pkgs.R ];
@@ -180,7 +182,7 @@
 
           piledownR-integration = pkgs.stdenv.mkDerivation {
             pname = "piledownR-integration";
-            version = "0.1.0";
+            inherit version;
             src = pkgs.lib.cleanSource ./.;
             nativeBuildInputs = [
               (pkgs.rWrapper.override {
@@ -196,7 +198,7 @@
 
           pyledown-integration = pkgs.stdenv.mkDerivation {
             pname = "pyledown-integration";
-            version = "0.1.0";
+            inherit version;
             src = pkgs.lib.cleanSource ./.;
             nativeBuildInputs = [
               (python3.withPackages (ps: [
@@ -213,7 +215,7 @@
 
           doc = pkgs.rustPlatform.buildRustPackage {
             pname = "piledown-doc";
-            version = "0.1.0";
+            inherit version;
             inherit src;
             cargoLock.lockFile = ./Cargo.lock;
             nativeBuildInputs = [ python3 pkgs.R ];

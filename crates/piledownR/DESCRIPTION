@@ -1,6 +1,6 @@
 Package: piledownR
 Title: Per-Base Coverage from RNASeq BAMs
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: person("piledown authors", role = c("aut", "cre"),
     email = "noreply@example.com")
 Description: Computes per-base coverage (pileup) from RNASeq BAM files,
