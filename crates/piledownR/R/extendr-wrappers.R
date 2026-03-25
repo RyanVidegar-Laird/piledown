@@ -22,5 +22,17 @@ PileParams$generate_stream <- function() .Call(wrap__PileParams__generate_stream
 #' @export
 `[[.PileParams` <- `$.PileParams`
 
+JunctionParams <- new.env(parent = emptyenv())
+
+JunctionParams$new <- function(input_bam, lib_fragment_type, seqs, starts, ends, region_names, region_strands, junctions_file, exclude_flags, index_path, concurrency, anchor_length) .Call(wrap__JunctionParams__new, input_bam, lib_fragment_type, seqs, starts, ends, region_names, region_strands, junctions_file, exclude_flags, index_path, concurrency, anchor_length)
+
+JunctionParams$generate_stream <- function() .Call(wrap__JunctionParams__generate_stream, self)
+
+#' @export
+`$.JunctionParams` <- function (self, name) { func <- JunctionParams[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.JunctionParams` <- `$.JunctionParams`
+
 
 # nolint end

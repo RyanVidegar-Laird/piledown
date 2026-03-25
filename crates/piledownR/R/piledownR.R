@@ -159,3 +159,110 @@ generate <- function(params) {
   stream <- params$generate_stream()
   arrow::as_record_batch_reader(stream)
 }
+
+#' Create a new JunctionParams for junction counting.
+#'
+#' Exactly one junction source must be provided: \code{seqs} (decomposed vectors),
+#' \code{junctions_df} (data.frame/tibble), or \code{junctions_file} (TSV path).
+#'
+#' @param input_bam Path to indexed BAM file.
+#' @param lib_fragment_type One of "isr", "isf".
+#' @param seqs Optional character vector of sequence names.
+#' @param starts Numeric vector of junction start positions.
+#' @param ends Numeric vector of junction end positions.
+#' @param names Character vector of junction names.
+#' @param strands Character vector of strand strings.
+#' @param junctions_df Optional data.frame or tibble with columns: seq, start, end, name, strand.
+#' @param junctions_file Optional path to TSV junctions file.
+#' @param exclude_flags Optional SAM flags to exclude (integer 0-65535).
+#' @param index_path Optional explicit path to BAM index (.bai).
+#' @param concurrency Number of concurrent processors (default 4).
+#' @param anchor_length Minimum flanking match bases (default NULL = 0).
+#' @return A JunctionParams object.
+#' @export
+junction_params <- function(
+    input_bam,
+    lib_fragment_type,
+    seqs = NULL, starts = NULL, ends = NULL,
+    names = NULL, strands = NULL,
+    junctions_df = NULL, junctions_file = NULL,
+    exclude_flags = NULL, index_path = NULL,
+    concurrency = NULL, anchor_length = NULL) {
+
+  groups <- c(
+    seqs = !is.null(seqs),
+    junctions_df = !is.null(junctions_df),
+    junctions_file = !is.null(junctions_file)
+  )
+  active <- sum(groups)
+  if (active != 1) {
+    stop("provide exactly one of: seqs, junctions_df, junctions_file")
+  }
+
+  if (groups["seqs"]) {
+    if (is.null(starts) || is.null(ends) || is.null(names) || is.null(strands)) {
+      stop("'seqs' requires 'starts', 'ends', 'names', and 'strands'")
+    }
+    lens <- c(length(seqs), length(starts), length(ends), length(names), length(strands))
+    if (length(unique(lens)) != 1) {
+      stop(sprintf(
+        "'seqs' (%d), 'starts' (%d), 'ends' (%d), 'names' (%d), 'strands' (%d) must all be the same length",
+        lens[1], lens[2], lens[3], lens[4], lens[5]
+      ))
+    }
+    JunctionParams$new(
+      input_bam, lib_fragment_type,
+      seqs = seqs, starts = as.numeric(starts), ends = as.numeric(ends),
+      region_names = names, region_strands = strands,
+      junctions_file = NULL,
+      exclude_flags = exclude_flags, index_path = index_path,
+      concurrency = concurrency, anchor_length = anchor_length
+    )
+  } else if (groups["junctions_df"]) {
+    if (!is.data.frame(junctions_df)) {
+      stop("'junctions_df' must be a data.frame or tibble")
+    }
+    required_cols <- c("seq", "start", "end", "name", "strand")
+    missing <- setdiff(required_cols, colnames(junctions_df))
+    if (length(missing) > 0) {
+      stop(sprintf(
+        "junctions_df must have columns: seq, start, end, name, strand (missing: %s)",
+        paste(missing, collapse = ", ")
+      ))
+    }
+    JunctionParams$new(
+      input_bam, lib_fragment_type,
+      seqs = as.character(junctions_df$seq),
+      starts = as.numeric(junctions_df$start),
+      ends = as.numeric(junctions_df$end),
+      region_names = as.character(junctions_df$name),
+      region_strands = as.character(junctions_df$strand),
+      junctions_file = NULL,
+      exclude_flags = exclude_flags, index_path = index_path,
+      concurrency = concurrency, anchor_length = anchor_length
+    )
+  } else if (groups["junctions_file"]) {
+    JunctionParams$new(
+      input_bam, lib_fragment_type,
+      seqs = NULL, starts = NULL, ends = NULL,
+      region_names = NULL, region_strands = NULL,
+      junctions_file = junctions_file,
+      exclude_flags = exclude_flags, index_path = index_path,
+      concurrency = concurrency, anchor_length = anchor_length
+    )
+  }
+}
+
+#' Count reads matching each junction.
+#'
+#' Runs the junction engine on the BAM file and junctions configured in the
+#' given JunctionParams object. Returns an Arrow RecordBatchReader with columns:
+#' name, seq, strand, start, end, count.
+#'
+#' @param params A JunctionParams object created via \code{junction_params()}.
+#' @return An \code{arrow::RecordBatchReader}.
+#' @export
+generate_stream <- function(params) {
+  stream <- params$generate_stream()
+  arrow::as_record_batch_reader(stream)
+}

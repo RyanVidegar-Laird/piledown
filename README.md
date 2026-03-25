@@ -14,9 +14,11 @@
 # Piledown
 Like a pileup, but also down...
 
-Per-base coverage from RNA-seq BAMs -- matches *and* skips.
+Per-base coverage and junction counting from RNA-seq BAMs.
 
 Standard coverage tools like `samtools depth` count how many reads overlap each position, but they don't distinguish between bases that were **matched** (M/=/X CIGAR ops) and bases that were **skipped** (N ops, i.e. spliced-out introns). Piledown counts both separately, giving you `up` (match) and `down` (skip) counts at every position in a region. This is useful for splice-aware QC, intron retention analysis, and junction coverage profiling.
+
+Piledown also counts reads with **exact splice junction matches** — reads whose CIGAR N-ops land precisely at specified donor-acceptor pairs. This gives you per-junction read counts with optional anchor length filtering.
 
 Other features:
 - **Strand-aware** -- filter reads by inferred transcript strand using ISR/ISF library protocols (same conventions as Salmon)
@@ -70,10 +72,14 @@ Add Piledown to your `flake.nix`:
 
 ### CLI
 
-The CLI binary is `pldn`. Single region to TSV:
+The CLI binary is `pldn`. It has two subcommands: `coverage` (default) and `junctions`.
+
+#### Coverage
+
+Single region to TSV:
 
 ```bash
-pldn sample.bam \
+pldn coverage sample.bam \
   --region "chr1:14900-15200" \
   --strand reverse \
   --lib-fragment-type isr
@@ -87,6 +93,34 @@ region	chr1	-	14900	0	0
 region	chr1	-	14901	0	0
 region	chr1	-	14902	1	0
 ...
+```
+
+For backward compatibility, the `coverage` subcommand is optional — bare `pldn sample.bam ...` still works.
+
+#### Junctions
+
+Count reads with exact splice junction matches:
+
+```bash
+pldn junctions sample.bam \
+  --region "chr1:153990803-153991114" \
+  --strand forward \
+  --lib-fragment-type isr
+```
+
+Output:
+
+```
+name	seq	strand	start	end	count
+region	chr1	+	153990803	153991114	122
+```
+
+With a regions file containing multiple junctions:
+
+```bash
+pldn junctions sample.bam \
+  --regions-file junctions.tsv \
+  --lib-fragment-type isr
 ```
 
 ### Pipe TSV into DuckDB
@@ -147,6 +181,8 @@ duckdb -c "
 
 ### Python
 
+#### Coverage
+
 ```python
 import pyledown
 import pyarrow
@@ -165,7 +201,33 @@ df = batch.to_pandas()
 print(df[df["up"] > 0].head())
 ```
 
+#### Junctions
+
+```python
+import pyledown
+import pandas as pd
+
+junctions_df = pd.DataFrame({
+    "seq": ["chr1", "chr1"],
+    "start": [153990803, 23694792],
+    "end": [153991114, 23695797],
+    "name": ["junc_a", "junc_b"],
+    "strand": ["+", "-"],
+})
+
+params = pyledown.JunctionParams(
+    input_bam="sample.bam",
+    lib_fragment_type=pyledown.LibFragmentType.Isr,
+    junctions_df=junctions_df,
+)
+
+batch = params.generate()  # returns a pyarrow.RecordBatch
+print(batch.to_pandas())
+```
+
 ### R
+
+#### Coverage
 
 ```r
 library(piledownR)
@@ -183,4 +245,25 @@ reader <- generate(params)  # returns arrow::RecordBatchReader
 df <- as_tibble(reader$read_table())
 
 df |> filter(up > 0) |> head()
+```
+
+#### Junctions
+
+```r
+library(piledownR)
+library(dplyr)
+
+params <- junction_params(
+  input_bam = "sample.bam",
+  lib_fragment_type = "isr",
+  seqs = c("chr1", "chr1"),
+  starts = c(153990803, 23694792),
+  ends = c(153991114, 23695797),
+  names = c("junc_a", "junc_b"),
+  strands = c("+", "-")
+)
+
+reader <- generate_stream(params)  # returns arrow::RecordBatchReader
+df <- as_tibble(reader$read_table())
+print(df)
 ```

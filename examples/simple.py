@@ -1,11 +1,13 @@
 from pathlib import Path
-from pyledown import PileParams, Strand, LibFragmentType
+from pyledown import PileParams, JunctionParams, Strand, LibFragmentType
 import pandas as pd
 import pyarrow as pa
 import seaborn as sns
 import matplotlib.pyplot as plt
 
 input_bam = Path() / "tests" / "data" / "SRR21778056-sorted-subsample.bam"
+
+# --- Coverage ---
 
 regions_df = pd.DataFrame({
     "seq": ["chr1", "chr1"],
@@ -30,3 +32,22 @@ sns.lineplot(plot_region, x="pos", y="up")
 sns.lineplot(plot_region, x="pos", y="down")
 plt.title("region_a: chr1:14000-20000 (reverse strand)")
 plt.show()
+
+# --- Junction counting ---
+
+junctions_df = pd.DataFrame({
+    "seq": ["chr1", "chr1"],
+    "start": [153990803, 23694792],
+    "end": [153991114, 23695797],
+    "name": ["junc_a", "junc_b"],
+    "strand": ["+", "-"],
+})
+
+jp = JunctionParams(
+    input_bam,
+    LibFragmentType.Isr,
+    junctions_df=junctions_df,
+)
+
+junc_res = jp.generate()
+print(junc_res.to_pandas())
