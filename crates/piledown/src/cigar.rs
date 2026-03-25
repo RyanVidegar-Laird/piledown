@@ -118,7 +118,7 @@ pub fn junction_matches(
 
                 if skip_start == junc_start && skip_end == junc_end {
                     let left_ok =
-                        anchor_length == 0 || last_match_len.map_or(false, |l| l >= anchor_length);
+                        anchor_length == 0 || last_match_len.is_some_and(|l| l >= anchor_length);
 
                     let right_anchor = ops[(i + 1)..].iter().find_map(|op| match op.kind() {
                         Kind::Match | Kind::SequenceMatch | Kind::SequenceMismatch => {
@@ -128,7 +128,7 @@ pub fn junction_matches(
                         Kind::Skip | Kind::Deletion => Some(0),
                     });
                     let right_ok =
-                        anchor_length == 0 || right_anchor.map_or(false, |l| l >= anchor_length);
+                        anchor_length == 0 || right_anchor.is_some_and(|l| l >= anchor_length);
 
                     if left_ok && right_ok {
                         return true;
