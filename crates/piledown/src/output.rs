@@ -49,6 +49,40 @@ pub fn to_record_batch(region: PileRegion, map: CoverageMap) -> Result<RecordBat
     Ok(batch)
 }
 
+use crate::junction::JunctionRegion;
+
+pub fn junction_to_record_batch(junction: JunctionRegion, count: u64) -> Result<RecordBatch> {
+    let schema = Schema::new(vec![
+        Field::new("name", DataType::Utf8, false),
+        Field::new("seq", DataType::Utf8, false),
+        Field::new_dictionary("strand", DataType::Int8, DataType::Utf8, false),
+        Field::new("start", DataType::UInt64, false),
+        Field::new("end", DataType::UInt64, false),
+        Field::new("count", DataType::UInt64, false),
+    ]);
+
+    let mut name_builder = GenericStringBuilder::<i32>::new();
+    let mut seq_builder = GenericStringBuilder::<i32>::new();
+    let mut strand_builder = StringDictionaryBuilder::<Int8Type>::with_capacity(3, 1, 8);
+
+    name_builder.append_value(&junction.name);
+    seq_builder.append_value(&junction.seq);
+    strand_builder.append_value(junction.strand.as_ref());
+
+    let batch = RecordBatch::try_new(
+        Arc::new(schema),
+        vec![
+            Arc::new(name_builder.finish()),
+            Arc::new(seq_builder.finish()),
+            Arc::new(strand_builder.finish()),
+            Arc::new(UInt64Array::from(vec![junction.start])),
+            Arc::new(UInt64Array::from(vec![junction.end])),
+            Arc::new(UInt64Array::from(vec![count])),
+        ],
+    )?;
+    Ok(batch)
+}
+
 /// Base builder for Parquet writer properties.
 /// Uses DELTA_BINARY_PACKED for pos/up/down columns and SNAPPY compression.
 pub fn parquet_props_builder() -> parquet::file::properties::WriterPropertiesBuilder {
@@ -160,6 +194,100 @@ pub async fn write_stream_as_parquet(
     while let Some(result) = stream.next().await {
         let (region, map) = result?;
         let batch = to_record_batch(region, map)?;
+        w.write(&batch).await?;
+    }
+
+    w.close().await?;
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+pub async fn write_junction_stream_as_tsv<W: tokio::io::AsyncWrite + Unpin + Send>(
+    stream: impl futures::Stream<Item = Result<(JunctionRegion, u64)>>,
+    writer: W,
+) -> Result<()> {
+    use csv_async::AsyncWriterBuilder;
+    use futures::StreamExt;
+
+    let mut csv_writer = AsyncWriterBuilder::new()
+        .delimiter(b'\t')
+        .create_serializer(writer);
+
+    csv_writer
+        .serialize(("name", "seq", "strand", "start", "end", "count"))
+        .await?;
+
+    let mut stream = std::pin::pin!(stream);
+    while let Some(result) = stream.next().await {
+        let (junction, count) = result?;
+        csv_writer
+            .serialize((
+                &junction.name,
+                &junction.seq,
+                junction.strand.as_ref(),
+                junction.start,
+                junction.end,
+                count,
+            ))
+            .await?;
+    }
+    csv_writer.flush().await?;
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+pub async fn write_junction_stream_as_arrow(
+    stream: impl futures::Stream<Item = Result<(JunctionRegion, u64)>>,
+    writer: impl std::io::Write,
+) -> Result<()> {
+    use futures::StreamExt;
+
+    let mut stream = std::pin::pin!(stream);
+
+    let first = match stream.next().await {
+        Some(result) => result?,
+        None => return Ok(()),
+    };
+
+    let first_batch = junction_to_record_batch(first.0, first.1)?;
+    let mut w = arrow::ipc::writer::StreamWriter::try_new_buffered(writer, &first_batch.schema())?;
+    w.write(&first_batch)?;
+
+    while let Some(result) = stream.next().await {
+        let (junction, count) = result?;
+        let batch = junction_to_record_batch(junction, count)?;
+        w.write(&batch)?;
+    }
+
+    w.flush()?;
+    w.finish()?;
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+pub async fn write_junction_stream_as_parquet(
+    stream: impl futures::Stream<Item = Result<(JunctionRegion, u64)>>,
+    writer: impl tokio::io::AsyncWrite + Unpin + Send,
+    props: Option<parquet::file::properties::WriterProperties>,
+) -> Result<()> {
+    use futures::StreamExt;
+    use parquet::arrow::async_writer::AsyncArrowWriter;
+
+    let mut stream = std::pin::pin!(stream);
+
+    let first = match stream.next().await {
+        Some(result) => result?,
+        None => return Ok(()),
+    };
+
+    let first_batch = junction_to_record_batch(first.0, first.1)?;
+    let writer_props = props.unwrap_or_else(default_parquet_props);
+    let mut w = AsyncArrowWriter::try_new(writer, first_batch.schema(), Some(writer_props))?;
+    w.write(&first_batch).await?;
+
+    while let Some(result) = stream.next().await {
+        let (junction, count) = result?;
+        let batch = junction_to_record_batch(junction, count)?;
         w.write(&batch).await?;
     }
 
@@ -343,6 +471,43 @@ mod tests {
         assert_eq!(pos_col.value(0), 100);
         assert_eq!(pos_col.value(4), 104);
     }
+
+    // --- Junction output tests ---
+
+    #[test]
+    fn junction_record_batch_schema() {
+        use crate::junction::JunctionRegion;
+        let jr = JunctionRegion::new("chr1".into(), 100, 500, "j1".into(), Strand::Forward).unwrap();
+        let batch = junction_to_record_batch(jr, 42).unwrap();
+        let schema = batch.schema();
+        assert_eq!(schema.fields().len(), 6);
+        assert_eq!(schema.field(0).name(), "name");
+        assert_eq!(schema.field(1).name(), "seq");
+        assert_eq!(schema.field(2).name(), "strand");
+        assert_eq!(schema.field(3).name(), "start");
+        assert_eq!(schema.field(4).name(), "end");
+        assert_eq!(schema.field(5).name(), "count");
+    }
+
+    #[test]
+    fn junction_record_batch_values() {
+        use crate::junction::JunctionRegion;
+        let jr = JunctionRegion::new("chr1".into(), 100, 500, "j1".into(), Strand::Reverse).unwrap();
+        let batch = junction_to_record_batch(jr, 42).unwrap();
+        assert_eq!(batch.num_rows(), 1);
+
+        let count_col = batch.column(5).as_any()
+            .downcast_ref::<arrow::array::UInt64Array>().unwrap();
+        assert_eq!(count_col.value(0), 42);
+
+        let start_col = batch.column(3).as_any()
+            .downcast_ref::<arrow::array::UInt64Array>().unwrap();
+        assert_eq!(start_col.value(0), 100);
+
+        let end_col = batch.column(4).as_any()
+            .downcast_ref::<arrow::array::UInt64Array>().unwrap();
+        assert_eq!(end_col.value(0), 500);
+    }
 }
 
 #[cfg(test)]
@@ -464,5 +629,28 @@ mod streaming_tests {
             .downcast_ref::<arrow::array::UInt64Array>()
             .unwrap();
         assert_eq!(up_col.value(0), 99);
+    }
+
+    #[tokio::test]
+    async fn stream_junction_tsv_output() {
+        use crate::junction::JunctionRegion;
+        use tokio::io::AsyncReadExt;
+
+        let (writer, mut reader) = tokio::io::duplex(8192);
+
+        let write_task = tokio::spawn(async move {
+            let jr = JunctionRegion::new("chr1".into(), 100, 500, "junc1".into(), Strand::Forward).unwrap();
+            let items: Vec<Result<(JunctionRegion, u64)>> = vec![Ok((jr, 42))];
+            write_junction_stream_as_tsv(stream::iter(items), writer).await.unwrap();
+        });
+
+        let mut output = String::new();
+        reader.read_to_string(&mut output).await.unwrap();
+        write_task.await.unwrap();
+
+        let lines: Vec<&str> = output.trim().lines().collect();
+        assert_eq!(lines[0], "name\tseq\tstrand\tstart\tend\tcount");
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[1], "junc1\tchr1\t+\t100\t500\t42");
     }
 }
