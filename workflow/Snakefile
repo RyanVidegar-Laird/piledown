@@ -1,0 +1,15 @@
+configfile: "config.yaml"
+
+
+include: "rules/reference.smk"
+include: "rules/fetch.smk"
+include: "rules/genome.smk"
+include: "rules/align.smk"
+
+
+rule all:
+    input:
+        expand(
+            "results/aligned/{sample}.sorted.bam.bai",
+            sample=config["samples"],
+        ),
