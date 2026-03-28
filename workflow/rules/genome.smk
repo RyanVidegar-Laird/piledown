@@ -6,6 +6,8 @@ rule star_genome_generate:
         ),
     output:
         directory("results/reference/star_index"),
+    log:
+        "results/logs/star_genome_generate.log",
     threads: config["star"]["threads"]
     shell:
         """
@@ -16,5 +18,6 @@ rule star_genome_generate:
             --genomeFastaFiles {input.fasta} \
             --readFilesCommand zcat \
             --sjdbGTFfile {input.gtf} \
-            --sjdbOverhang {config[star][sjdb_overhang]}
+            --sjdbOverhang {config[star][sjdb_overhang]} \
+            2> {log}
         """

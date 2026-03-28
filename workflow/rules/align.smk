@@ -8,6 +8,8 @@ rule star_align:
         ),
     output:
         bam="results/aligned/{sample}.sorted.bam",
+    log:
+        "results/logs/star_align_{sample}.log",
     params:
         tmpdir="results/aligned/{sample}_star_tmp/",
     threads: config["star"]["threads"]
@@ -23,7 +25,8 @@ rule star_align:
             --outSAMtype BAM SortedByCoordinate \
             --outSAMmode NoQS \
             --outSAMunmapped Within \
-            --outFileNamePrefix {params.tmpdir}
+            --outFileNamePrefix {params.tmpdir} \
+            2> {log}
         mv {params.tmpdir}Aligned.sortedByCoord.out.bam {output.bam}
         rm -rf {params.tmpdir}
         """
@@ -34,6 +37,8 @@ rule samtools_index:
         "results/aligned/{sample}.sorted.bam",
     output:
         "results/aligned/{sample}.sorted.bam.bai",
+    log:
+        "results/logs/samtools_index_{sample}.log",
     threads: 4
     shell:
-        "samtools index -@ {threads} {input}"
+        "samtools index -@ {threads} {input} 2> {log}"

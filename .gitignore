@@ -78,3 +78,4 @@ ipython_config.py
 
 # Snakemake workflow outputs
 workflow/results/
+workflow/.snakemake/

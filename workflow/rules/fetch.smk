@@ -2,12 +2,15 @@ rule fetch_fastq:
     output:
         r1="results/fastq/{sample}_1.fastq.gz",
         r2="results/fastq/{sample}_2.fastq.gz",
+    log:
+        "results/logs/fetch_fastq_{sample}.log",
     params:
         outdir="results/fastq",
         tmpdir="results/fastq/tmp_{sample}",
     threads: workflow.cores
     shell:
         """
+        (
         mkdir -p {params.tmpdir}
         export VDB_CONFIG={params.tmpdir}/vdb-config
         vdb-config -Q yes
@@ -20,4 +23,5 @@ rule fetch_fastq:
         pigz -p {threads} {params.outdir}/{wildcards.sample}_1.fastq
         pigz -p {threads} {params.outdir}/{wildcards.sample}_2.fastq
         rm -rf {params.tmpdir}
+        ) 2> {log}
         """
