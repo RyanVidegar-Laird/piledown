@@ -22,6 +22,11 @@
       let
         pkgs = import nixpkgs {
           inherit system;
+          config.allowUnfreePredicate = pkg:
+            builtins.elem (pkgs.lib.getName pkg) [
+              "sratoolkit"
+              "ncbi-vdb"
+            ];
         };
 
         version = "0.2.0";
@@ -114,7 +119,6 @@
             roxygen2
             rextendr
             testthat
-            piledownR
             ggplot2
             tidyr
             dplyr
@@ -125,13 +129,19 @@
           cargo-edit
           cargo-generate
           cargo-nextest
+          curl
           duckdb
           maturin
-          samtools
+          pigz
           pyright
           ruff
+          samtools
           pythonEnv
           rEnv
+          snakefmt
+          snakemake
+          sratoolkit
+          star
         ];
 
       in
@@ -156,9 +166,10 @@
             pname = "piledown-fmt";
             inherit version;
             inherit src;
-            nativeBuildInputs = [ pkgs.rustfmt pkgs.cargo ];
+            nativeBuildInputs = [ pkgs.rustfmt pkgs.cargo pkgs.snakefmt ];
             buildPhase = ''
               cargo fmt -- --check
+              snakefmt --check workflow/
             '';
             installPhase = "mkdir -p $out";
           };
@@ -233,7 +244,9 @@
         };
 
         devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [ pkgs.rustc pkgs.cargo pkgs.clippy pkgs.rustfmt pkgs.rust-analyzer ] ++ devPkgs;
+          nativeBuildInputs = [
+            pkgs.rustc pkgs.cargo pkgs.clippy pkgs.rustfmt pkgs.rust-analyzer
+          ] ++ devPkgs;
         };
       });
 }
