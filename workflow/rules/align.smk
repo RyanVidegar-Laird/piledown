@@ -22,6 +22,7 @@ rule star_align:
             --genomeDir {input.index} \
             --sjdbGTFfile {input.gtf} \
             --sjdbOverhang {config[star][sjdb_overhang]} \
+            --twopassMode Basic \
             --outSAMtype BAM SortedByCoordinate \
             --outSAMmode NoQS \
             --outSAMunmapped Within \
