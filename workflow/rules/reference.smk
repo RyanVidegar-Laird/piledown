@@ -1,8 +1,8 @@
 rule download_fasta:
     output:
-        "results/reference/GRCh38.primary_assembly.genome.fa.gz",
+        "workflow/results/reference/GRCh38.primary_assembly.genome.fa.gz",
     log:
-        "results/logs/download_fasta.log",
+        "workflow/results/logs/download_fasta.log",
     params:
         url=config["reference"]["fasta_url"],
     shell:
@@ -11,9 +11,9 @@ rule download_fasta:
 
 rule download_gtf:
     output:
-        "results/reference/gencode.v{release}.annotation.gtf.gz",
+        "workflow/results/reference/gencode.v{release}.annotation.gtf.gz",
     log:
-        "results/logs/download_gtf_{release}.log",
+        "workflow/results/logs/download_gtf_{release}.log",
     params:
         url=config["reference"]["gtf_url"],
     shell:

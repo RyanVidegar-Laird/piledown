@@ -1,4 +1,4 @@
-configfile: "config.yaml"
+configfile: "workflow/config.yaml"
 
 
 include: "rules/reference.smk"
@@ -10,6 +10,6 @@ include: "rules/align.smk"
 rule all:
     input:
         expand(
-            "results/aligned/{sample}.sorted.bam.bai",
+            "workflow/results/aligned/{sample}.sorted.bam.bai",
             sample=config["samples"],
         ),

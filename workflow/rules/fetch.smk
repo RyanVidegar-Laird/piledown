@@ -1,12 +1,12 @@
 rule fetch_fastq:
     output:
-        r1="results/fastq/{sample}_1.fastq.gz",
-        r2="results/fastq/{sample}_2.fastq.gz",
+        r1="workflow/results/fastq/{sample}_1.fastq.gz",
+        r2="workflow/results/fastq/{sample}_2.fastq.gz",
     log:
-        "results/logs/fetch_fastq_{sample}.log",
+        "workflow/results/logs/fetch_fastq_{sample}.log",
     params:
-        outdir="results/fastq",
-        tmpdir="results/fastq/tmp_{sample}",
+        outdir="workflow/results/fastq",
+        tmpdir="workflow/results/fastq/tmp_{sample}",
     threads: workflow.cores
     shell:
         """

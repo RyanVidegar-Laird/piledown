@@ -1,13 +1,13 @@
 rule star_genome_generate:
     input:
-        fasta="results/reference/GRCh38.primary_assembly.genome.fa.gz",
-        gtf="results/reference/gencode.v{release}.annotation.gtf.gz".format(
+        fasta="workflow/results/reference/GRCh38.primary_assembly.genome.fa.gz",
+        gtf="workflow/results/reference/gencode.v{release}.annotation.gtf.gz".format(
             release=config["gencode_release"]
         ),
     output:
-        directory("results/reference/star_index"),
+        directory("workflow/results/reference/star_index"),
     log:
-        "results/logs/star_genome_generate.log",
+        "workflow/results/logs/star_genome_generate.log",
     threads: config["star"]["threads"]
     shell:
         """

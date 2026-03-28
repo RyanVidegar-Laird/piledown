@@ -1,17 +1,17 @@
 rule star_align:
     input:
-        r1="results/fastq/{sample}_1.fastq.gz",
-        r2="results/fastq/{sample}_2.fastq.gz",
-        index="results/reference/star_index",
-        gtf="results/reference/gencode.v{release}.annotation.gtf.gz".format(
+        r1="workflow/results/fastq/{sample}_1.fastq.gz",
+        r2="workflow/results/fastq/{sample}_2.fastq.gz",
+        index="workflow/results/reference/star_index",
+        gtf="workflow/results/reference/gencode.v{release}.annotation.gtf.gz".format(
             release=config["gencode_release"]
         ),
     output:
-        bam="results/aligned/{sample}.sorted.bam",
+        bam="workflow/results/aligned/{sample}.sorted.bam",
     log:
-        "results/logs/star_align_{sample}.log",
+        "workflow/results/logs/star_align_{sample}.log",
     params:
-        tmpdir="results/aligned/{sample}_star_tmp/",
+        tmpdir="workflow/results/aligned/{sample}_star_tmp/",
     threads: config["star"]["threads"]
     shell:
         """
@@ -34,11 +34,11 @@ rule star_align:
 
 rule samtools_index:
     input:
-        "results/aligned/{sample}.sorted.bam",
+        "workflow/results/aligned/{sample}.sorted.bam",
     output:
-        "results/aligned/{sample}.sorted.bam.bai",
+        "workflow/results/aligned/{sample}.sorted.bam.bai",
     log:
-        "results/logs/samtools_index_{sample}.log",
+        "workflow/results/logs/samtools_index_{sample}.log",
     threads: 4
     shell:
         "samtools index -@ {threads} {input} 2> {log}"
